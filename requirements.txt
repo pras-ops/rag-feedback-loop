@@ -1,0 +1,9 @@
+sentence-transformers
+numpy
+scipy
+scikit-learn
+fastapi
+uvicorn
+pydantic
+matplotlib
+google-genai
