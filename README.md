@@ -186,6 +186,8 @@ by verifier coverage, and above ~50% contamination no estimator on the feedback 
 can recover truth (information-theoretic). Robust estimator modes are selectable via
 `robust_estimator_mode` (`"beta"` default, `"median"`, `"trimmed"`, `"mom"`).
 
+![Robustness Denoising Sweep](sim/robustness_comparison.png)
+
 ---
 
 ## Validation Status
@@ -206,15 +208,21 @@ Reported honestly — what the tests/sims actually establish, and what they don'
   recurrence, CAG's answer correctness separates from a static baseline with **non-overlapping
   95% CIs**. *Scope:* controlled corpus, synthetic keyword-verifier — a proof of mechanism, not
   a production number.
+  
+  ![Gate A Comparison](sim/gate_a_comparison.png)
 - **Gate B — decay helps adaptation** (`sim/run_gate_b.py`, **30-seed**): ground truth flips at
   step 50. Post-shift correctness: decay-OFF **0.417 [0.364, 0.469]** vs decay-ON
   **0.730 [0.673, 0.787]** — **non-overlapping CIs** (at n=10 they overlapped; 30 seeds settle
   it). Decay is what lets stale reputation fade.
+  
+  ![Gate B Comparison](sim/gate_b_comparison.png)
 - **Gate D — recurrence beats a strong reranker** (`sim/run_gate_d.py`): recurring-query
   benchmark (epochs over a fixed problem set) against a **cross-encoder** reranker. With
   recurrence, CAG (**global counters**) overtakes the reranker — the same reranker that *wins*
   without recurrence (Gate C). *Scope:* controlled synthetic hint corpus; see the realistic
   benchmark below.
+  
+  ![Gate D Comparison](sim/gate_d_comparison.png)
 
 ### Boundary condition ⛔ — stated, not hidden
 - **Gate C — no recurrence → a strong reranker wins** (`sim/run_gate_c.py`): one-shot HumanEval
@@ -223,6 +231,8 @@ Reported honestly — what the tests/sims actually establish, and what they don'
   CAG **59.4% [54.4, 64.4]**. With no repeated traffic, the reputation loop has nothing to
   accumulate, so CAG only pays a small exploration tax. *This negative result is central* — it
   constrains the claim to the recurrence regime instead of pretending CAG is universally better.
+  
+  ![Gate C Comparison](sim/gate_c_comparison.png)
 
 ### NOT yet validated ⚠️ (the important part)
 - **Realistic recurring-query benchmark — IN PROGRESS.** The recurrence win (Gate D) is on a
