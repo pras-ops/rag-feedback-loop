@@ -49,6 +49,8 @@ class CandidateSchema(BaseModel):
     fooled: float
     verified: float
     recent_outcomes: List[float]
+    cluster_counters: dict = {}
+    last_confirmed: float
     last_updated: float
 
 
@@ -104,7 +106,8 @@ def retrieve(req: RetrieveRequest):
         # 4. Save pending shares mapped to generated response_id
         response_id = str(uuid.uuid4())
         if shares:
-            store.save_pending(response_id, shares)
+            cluster_id = getattr(retriever, "last_query_cluster", "cluster_0")
+            store.save_pending(response_id, shares, cluster_id)
             
         # 5. Format results response
         items = []
@@ -122,6 +125,8 @@ def retrieve(req: RetrieveRequest):
                         fooled=cand.fooled,
                         verified=cand.verified,
                         recent_outcomes=cand.recent_outcomes,
+                        cluster_counters=cand.cluster_counters,
+                        last_confirmed=cand.last_confirmed,
                         last_updated=cand.last_updated
                     ),
                     score=score,
@@ -140,12 +145,13 @@ def retrieve(req: RetrieveRequest):
 @app.post("/feedback")
 def feedback(req: FeedbackRequest):
     # 1. Pop pending credit shares
-    shares = store.pop_pending(req.response_id)
-    if shares is None:
+    res = store.pop_pending(req.response_id)
+    if res is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pending shares for the given response_id not found or already processed."
         )
+    shares, cluster_id = res
         
     # 2. Build signals
     signals = OutcomeSignals(
@@ -163,7 +169,8 @@ def feedback(req: FeedbackRequest):
             signals=signals,
             use_liar_counter=True,
             use_adt_denoising=False,
-            robust_estimator_mode="beta"
+            robust_estimator_mode="beta",
+            cluster_id=cluster_id
         )
         return {"status": "success", "updated_candidates": list(shares.keys())}
     except Exception as e:

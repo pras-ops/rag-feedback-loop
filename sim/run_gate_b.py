@@ -1,5 +1,5 @@
 """
-CAG Phase B Validation: Staleness & Decay Sweep (10-Seed Comparison)
+CAG Phase B Validation: Staleness & Decay Sweep (30-Seed Comparison)
 Runs 100 evaluation steps per seed where the ground-truth document changes at step 50.
 Compares a CAG retriever with Decay ON (gamma = 0.90) vs. Decay OFF (gamma = 1.0).
 Saves comparison plots to sim/gate_b_comparison.png.
@@ -59,7 +59,15 @@ def calculate_stats(data: List[float]) -> Tuple[float, float, float, float]:
     variance = sum((x - mean) ** 2 for x in data) / max(1, n - 1)
     std = math.sqrt(variance)
     sem = std / math.sqrt(n)
-    t_val = 2.262 if n == 10 else 1.96
+    # exact two-sided 95% t critical value for df = n-1 (scipy if available)
+    if n > 1:
+        try:
+            from scipy import stats as _st
+            t_val = float(_st.t.ppf(0.975, n - 1))
+        except Exception:
+            t_val = 2.262 if n == 10 else (2.045 if n >= 30 else 1.96)
+    else:
+        t_val = 0.0
     ci_half = t_val * sem
     return mean, std, mean - ci_half, mean + ci_half
 
@@ -142,10 +150,10 @@ def run_simulation(seed: int, num_steps: int, gamma_val: float) -> Tuple[List[fl
 
 def main():
     print("=" * 110)
-    print("CAG PHASE B VALIDATION RUNNER: STALENESS & DECAY COMPARISON (10-SEED SWEEP)")
+    print("CAG PHASE B VALIDATION RUNNER: STALENESS & DECAY COMPARISON (30-SEED SWEEP)")
     print("=" * 110)
 
-    seeds = list(range(42, 52))
+    seeds = list(range(42, 72))  # 30 seeds for a real significance verdict
     num_steps = 100
 
     # Lists of length 100, storing average step correctness across all seeds
@@ -198,7 +206,7 @@ def main():
     off_phase2_stats = calculate_stats(decay_off_phase2_correctness)
 
     print("\n" + "=" * 115)
-    print("DECISION-GRADE GATE B RESULTS: DECAY ON VS DECAY OFF (10-SEED SWEEP, 100 STEPS)")
+    print("DECISION-GRADE GATE B RESULTS: DECAY ON VS DECAY OFF (30-SEED SWEEP, 100 STEPS)")
     print("=" * 115)
     print(f"{'Metric / Stage':<35} | {'Decay OFF (gamma=1.0)':<38} | {'Decay ON (gamma=0.90)':<38}")
     print("-" * 115)
@@ -225,7 +233,7 @@ def main():
         plt.plot(moving_average(decay_off_step_correctness), label="Decay OFF (gamma=1.0)", color="#dc2626", linewidth=2.5, linestyle="--")
         plt.plot(moving_average(decay_on_step_correctness), label="Decay ON (gamma=0.90)", color="#2563eb", linewidth=3.0)
         
-        plt.title("Gate B: Answer Correctness Learning Curve Comparison\n(10-Seed Average - 5-Step Moving Average)", fontsize=12, fontweight="bold")
+        plt.title("Gate B: Answer Correctness Learning Curve Comparison\n(30-Seed Average - 5-Step Moving Average)", fontsize=12, fontweight="bold")
         plt.xlabel("Query Step", fontsize=10)
         plt.ylabel("Answer Correctness", fontsize=10)
         plt.ylim(-0.05, 1.05)

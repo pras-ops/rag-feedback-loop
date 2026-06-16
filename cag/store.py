@@ -27,8 +27,31 @@ class Candidate:
     verified: float = 0.0
     recent_outcomes: List[float] = field(default_factory=list)
     
-    # Timestamp tracking for decay (seconds since epoch)
+    # Query-conditional counters (cluster_id -> dict of counters)
+    cluster_counters: Dict[str, dict] = field(default_factory=dict)
+    
+    # Timestamp tracking for recency-based decay and updates
+    last_confirmed: float = 0.0
     last_updated: float = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).timestamp())
+
+    def __post_init__(self):
+        if not self.last_confirmed:
+            self.last_confirmed = self.last_updated
+
+    def get_cluster(self, cid: str) -> dict:
+        """Returns the cluster dict, creating it with prior values if missing."""
+        if cid not in self.cluster_counters:
+            self.cluster_counters[cid] = {
+                "alpha": 1.0,
+                "beta": 1.0,
+                "A": 1.0,
+                "B": 1.0,
+                "fooled": 0.0,
+                "verified": 0.0,
+                "recent_outcomes": [],
+                "last_confirmed": self.last_confirmed,
+            }
+        return self.cluster_counters[cid]
 
     def to_dict(self) -> dict:
         return {
@@ -42,6 +65,8 @@ class Candidate:
             "fooled": self.fooled,
             "verified": self.verified,
             "recent_outcomes": self.recent_outcomes,
+            "cluster_counters": self.cluster_counters,
+            "last_confirmed": self.last_confirmed,
             "last_updated": self.last_updated,
         }
 
@@ -58,6 +83,8 @@ class Candidate:
             fooled=data.get("fooled", 0.0),
             verified=data.get("verified", 0.0),
             recent_outcomes=data.get("recent_outcomes", []),
+            cluster_counters=data.get("cluster_counters", {}),
+            last_confirmed=data.get("last_confirmed", 0.0),
             last_updated=data.get("last_updated", datetime.datetime.now(datetime.timezone.utc).timestamp()),
         )
 

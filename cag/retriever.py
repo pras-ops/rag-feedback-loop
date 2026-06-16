@@ -69,7 +69,10 @@ class Retriever:
         weights: Tuple[float, float, float, float] = (0.70, 0.20, 0.10, 0.0),
         model_name: str = "all-MiniLM-L6-v2",
         model: Optional[SentenceTransformer] = None,
-        robust_estimator_mode: str = "beta"
+        robust_estimator_mode: str = "beta",
+        use_optimistic_prior: bool = True,
+        clusterer: Optional[object] = None,
+        use_clustering: bool = True
     ):
         self.store = store
         self.k_rrf = k_rrf
@@ -77,6 +80,15 @@ class Retriever:
         self.model_name = model_name
         self._model = model
         self.robust_estimator_mode = robust_estimator_mode
+        self.use_optimistic_prior = use_optimistic_prior
+        self.use_clustering = use_clustering
+        
+        if clusterer is None:
+            from .clustering import QueryClusterer
+            self.clusterer = QueryClusterer()
+            self.clusterer.load(self.store)
+        else:
+            self.clusterer = clusterer
         
         # BM25 index cache
         self._bm25_cached: Optional[BM25] = None
@@ -159,6 +171,9 @@ class Retriever:
         """
         w_sim, w_c, w_p, w_explore = override_weights if override_weights is not None else self.weights
 
+        self.last_query_cluster = "cluster_0" if self.use_clustering else None
+        cluster_id = "cluster_0" if self.use_clustering else None
+
         # Check if first parameter is a real text query
         if isinstance(vector_scores, str):
             query = vector_scores
@@ -168,6 +183,13 @@ class Retriever:
 
             # 1. Compute query embedding
             query_emb = self.model.encode(query).tolist()
+            if self.use_clustering:
+                cluster_id = self.clusterer.assign(query_emb)
+                self.clusterer.save(self.store)
+                self.last_query_cluster = cluster_id
+            else:
+                cluster_id = None
+                self.last_query_cluster = None
             query_tokens = tokenize(query)
 
             # 2. Calculate vector similarity (dot product of unit length vectors)
@@ -208,31 +230,74 @@ class Retriever:
             if not candidate:
                 continue
 
-            # Decay on read
-            alpha = candidate.alpha
-            beta = candidate.beta
-            if current_timestamp is not None and current_timestamp > candidate.last_updated and gamma < 1.0 and decay_unit_sec > 0:
-                dt = current_timestamp - candidate.last_updated
-                days = dt / decay_unit_sec
-                decay_factor = gamma ** days
-                alpha = 1.0 + (alpha - 1.0) * decay_factor
-                beta = 1.0 + (beta - 1.0) * decay_factor
+            # Decay on read if not handled by SQL store
+            alpha_global = candidate.alpha
+            beta_global = candidate.beta
+            A_global = candidate.A
+            B_global = candidate.B
+
+            if not hasattr(self.store, "increment"):
+                # Recency-based decay for in-memory store: uses last_confirmed
+                last_confirmed = candidate.last_confirmed
+                dt = current_timestamp - last_confirmed if current_timestamp is not None else 0.0
+                if dt > 0 and decay_unit_sec > 0:
+                    days = dt / decay_unit_sec
+                    decay_factor = gamma ** days
+                    candidate.alpha = 1.0 + (candidate.alpha - 1.0) * decay_factor
+                    candidate.beta = 1.0 + (candidate.beta - 1.0) * decay_factor
+                    candidate.last_updated = current_timestamp
+                alpha_global = candidate.alpha
+                beta_global = candidate.beta
+
+            # Apply optimistic prior for cold-start / new docs
+            if self.use_optimistic_prior and (A_global + B_global <= 2.0 or (alpha_global == 1.0 and beta_global == 1.0)):
+                alpha_global = 2.0
+
+            # Hierarchical query-conditional cluster counters
+            alpha_c = 1.0
+            beta_c = 1.0
+            A_c = 1.0
+            B_c = 1.0
+            n_cluster = 0.0
+
+            cluster_counters = getattr(candidate, "cluster_counters", {})
+            if cluster_id and cluster_id in cluster_counters:
+                cc = cluster_counters[cluster_id]
+                cc_lc = cc.get("last_confirmed", candidate.last_confirmed)
                 
-                # Update candidate object in-place so returned candidate has decayed values
-                candidate.alpha = alpha
-                candidate.beta = beta
-                candidate.last_updated = current_timestamp
+                # Decay cluster counters on read
+                from .store_sqlite import _decay
+                cc_dt = 0.0
+                if current_timestamp is not None:
+                    cc_dt = (current_timestamp - cc_lc) / decay_unit_sec
+                
+                alpha_c = _decay(cc.get("alpha", 1.0), gamma, cc_dt)
+                beta_c = _decay(cc.get("beta", 1.0), gamma, cc_dt)
+                A_c = cc.get("A", 1.0)
+                B_c = cc.get("B", 1.0)
+                n_cluster = max(0.0, A_c + B_c - 2.0)
+
+            # Shrinkage interpolation (K_threshold = 10.0)
+            N_threshold = 10.0
+            lam = min(1.0, max(0.0, n_cluster / N_threshold))
+
+            alpha = (1.0 - lam) * alpha_global + lam * alpha_c
+            beta = (1.0 - lam) * beta_global + lam * beta_c
+            A = (1.0 - lam) * A_global + lam * A_c
+            B = (1.0 - lam) * B_global + lam * B_c
 
             # Robust estimation for exploitation C_robust
             from .feedback import calculate_robust_estimate
             robust_mode = robust_estimator_mode if robust_estimator_mode is not None else self.robust_estimator_mode
             C_robust = calculate_robust_estimate(candidate, robust_mode)
+            if robust_mode == "beta":
+                C_robust = alpha / (alpha + beta)
 
             # P(i) = A(i) / (A(i) + B(i))
-            P_i = candidate.A / (candidate.A + candidate.B)
+            P_i = A / (A + B) if (A + B) > 0 else 0.5
 
-            # Rarity/uncertainty bonus (UCB-style)
-            rarity_bonus = 1.0 / ((alpha + beta) ** 0.5)
+            # Rarity/uncertainty UCB bonus with exploration floor (min 0.05)
+            rarity_bonus = max(0.05, 1.0 / ((alpha + beta) ** 0.5))
 
             # Calculate total score using configured weights
             score = w_sim * sim + w_c * C_robust + w_p * P_i

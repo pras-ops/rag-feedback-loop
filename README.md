@@ -1,22 +1,34 @@
-# CAG — A Feedback-Learning Retrieval Layer
+# CAG — A Retrieval Reputation Layer
 
-CAG is a lightweight layer that sits on top of a retrieval system and, over repeated use,
-**learns which retrieved items actually produce good outcomes** — boosting what helps and
-decaying what goes stale. It is built around per-document Beta counters updated from
-feedback signals (verifier, user behavior, LLM judge, thumbs), with explicit safeguards
-against noisy and sycophantic feedback.
+CAG is **not a retriever.** It is a lightweight **reputation layer that sits on top of any
+retriever and converts verified downstream outcomes into a ranking signal** — boosting
+documents that have *actually produced good results* and decaying ones that go stale. It is
+built around per-document Beta counters updated from feedback (verifier, user behavior, LLM
+judge, thumbs), with explicit safeguards against noisy and sycophantic feedback.
 
-> **What it is:** a usefulness-and-freshness tracker for closed-loop retrieval systems.
-> **What it is not:** a truth detector. It is sharpest when a **verifier** (e.g. tests, a DB
-> check) supplies part of the feedback, and it is explicitly *not* designed to defend against
-> adversarial or unverifiable feedback at scale.
+The novelty is **not** finding relevant documents (rerankers already do that well). It is
+folding **verified historical usefulness** into ranking, while handling staleness and noisy
+feedback.
 
-This is a **research/experimental** project. The mechanism, persistence layer, and robustness
-safeguards are tested, and the core claim — *that feedback learning beats a static retriever* —
-is now **validated on controlled benchmarks with a verifier** (Gate A) along with the
-decay/freshness value-prop (Gate B). What remains open: a demonstration on a **real execution
-verifier** (HumanEval — substrate built, full demo in progress) and the no-verifier regime
-(see [Validation Status](#validation-status)).
+> **What it is:** a reputation / usefulness-and-freshness layer for closed-loop retrieval.
+> **What it is not:** a better retriever, or a truth detector. It adds no value where queries
+> don't recur or where there's no trustworthy feedback to learn from.
+
+### When it helps — and when it doesn't (the boundary condition)
+
+The central, evidence-backed claim is deliberately **conditional**:
+
+> **Recurrence + a trustworthy verifier →** CAG accumulates outcome signal and helps.
+> **No recurrence →** CAG cannot accumulate signal and *slightly underperforms* a strong
+> baseline (a small exploration tax).
+
+Both halves are demonstrated. We show a strong cross-encoder reranker **beating** CAG in a
+one-shot, non-recurring setting (Gate C) — that boundary is stated up front, not hidden. The
+*same* mechanism explains both the wins and the loss, which is the point: this is outcome-aware
+retrieval *under specific conditions*, not a universally superior retriever.
+
+This is a **research/experimental** project built around honest evaluation. See
+[Validation Status](#validation-status) for exactly what is and isn't established.
 
 ---
 
@@ -28,9 +40,10 @@ converge).
 
 | Use case | Fit | Why |
 |---|---|---|
-| **Coding agents** (retrieve fix patterns / snippets) | **Strongest** | Hard verifier (tests pass/fail) + controlled corpus → clean, objective feedback |
-| **Enterprise RAG over trusted docs** | Strong | Controlled source; main enemy is *staleness*, handled by decay + behavioral signal |
-| **Internal tools/agents over controlled data** | Strong | Same logic as above |
+| **Coding agents with *recurring* tasks** (reused fix patterns / snippets) | **Strongest** | Hard verifier (tests) **+ recurring problem families** → reputation converges |
+| **Enterprise RAG over trusted docs** | Strong | Recurring question types + controlled source; decay handles *staleness* |
+| **Internal tools / agents over controlled data** | Strong | Same logic as above |
+| **One-shot / non-recurring retrieval** | **No value** | Nothing to accumulate — a strong reranker wins (Gate C boundary) |
 | **Open web / public user-generated content** | **Avoid** | Adversarial + unverifiable feedback → the >50% identifiability wall (see Limitations) |
 
 ---
@@ -179,33 +192,50 @@ can recover truth (information-theoretic). Robust estimator modes are selectable
 
 Reported honestly — what the tests/sims actually establish, and what they don't.
 
-### Validated ✅
+### Validated ✅ — under recurrence + a verifier
 - **Persistence layer** (`tests/test_store_sqlite.py`): durability across reconnect, lazy
-  decay math, **atomic concurrent increments** (8 threads × 200 increments, zero lost
-  updates), and the pending retrieve↔feedback bridge.
+  decay math, **atomic concurrent increments** (8 threads × 200, zero lost updates), and the
+  pending retrieve↔feedback bridge. (35 tests pass, no resource leaks.)
 - **API atomic path**: `/feedback` routes through `store.increment()`, not a Python
-  read-modify-write — verified by reading the code path.
-- **Robustness ablation** (20-seed, mean±std): supports adopting the liar counter and
-  rejecting trimmed-mean / MoM, as above.
-- **Gate A — value vs. static** (`sim/run_gate_a.py`): 10-seed sweep at top_k=1 with an
-  **independent answer-verifier** that inspects only the generated answer text, never the
-  retrieved doc IDs — so the training signal no longer leaks the eval label. CAG's late-stage
-  answer correctness reaches **0.997 vs 0.700** for the static baseline, with **non-overlapping
-  95% CIs**; the independent Recall@1 metric (never used for training) rises 0.57 → 0.85.
-  *Scope:* controlled corpus, clean synthetic keyword-verifier, recurring queries — i.e. the
-  verifier-present regime.
-- **Gate B — decay / freshness** (`sim/run_gate_b.py`): 10-seed staleness sweep where ground
-  truth flips at step 50. Decay-ON re-adapts (Phase-2 correctness **0.91 vs 0.45** for
-  decay-OFF), non-overlapping CIs. *Scope:* controlled scenario, mock generation.
-- **Gate C — real-verifier showcase** (`sim/run_gate_c.py`, `sim/gate_c_verifier.py`): executes real HumanEval unit
-  tests on generated code in a sandboxed subprocess. Ingests a custom coding hint corpus (good vs distractor) on 5 problems. Under a 10-seed sweep using the real Gemini 2.5 Flash API, the Static retriever gets a pass rate of **34.6%** (partially bypassing distractors via pre-trained weights), while CAG learns to prioritize the good hints, achieving a late-stage pass rate of **44.7%** (and overall of **44.4%**) with non-overlapping 95% CIs on the overall metric.
+  read-modify-write — verified in the code path.
+- **Robustness ablation** (20-seed): supports adopting the liar counter and rejecting
+  trimmed-mean / MoM (below).
+- **Gate A — outcome-aware ranking helps under recurrence** (`sim/run_gate_a.py`): 10-seed,
+  top_k=1, with an **independent answer-verifier** that inspects only the generated answer
+  (never the retrieved doc IDs), so the training signal can't leak the eval label. Under
+  recurrence, CAG's answer correctness separates from a static baseline with **non-overlapping
+  95% CIs**. *Scope:* controlled corpus, synthetic keyword-verifier — a proof of mechanism, not
+  a production number.
+- **Gate B — decay helps adaptation** (`sim/run_gate_b.py`, **30-seed**): ground truth flips at
+  step 50. Post-shift correctness: decay-OFF **0.417 [0.364, 0.469]** vs decay-ON
+  **0.730 [0.673, 0.787]** — **non-overlapping CIs** (at n=10 they overlapped; 30 seeds settle
+  it). Decay is what lets stale reputation fade.
+- **Gate D — recurrence beats a strong reranker** (`sim/run_gate_d.py`): recurring-query
+  benchmark (epochs over a fixed problem set) against a **cross-encoder** reranker. With
+  recurrence, CAG (**global counters**) overtakes the reranker — the same reranker that *wins*
+  without recurrence (Gate C). *Scope:* controlled synthetic hint corpus; see the realistic
+  benchmark below.
+
+### Boundary condition ⛔ — stated, not hidden
+- **Gate C — no recurrence → a strong reranker wins** (`sim/run_gate_c.py`): one-shot HumanEval
+  (50 distinct problems, ~1 visit each), **real Gemini generation**, **real unit-test verifier**.
+  A production-grade cross-encoder reranker **beats CAG** — overall **65.2% [60.6, 69.8]** vs
+  CAG **59.4% [54.4, 64.4]**. With no repeated traffic, the reputation loop has nothing to
+  accumulate, so CAG only pays a small exploration tax. *This negative result is central* — it
+  constrains the claim to the recurrence regime instead of pretending CAG is universally better.
 
 ### NOT yet validated ⚠️ (the important part)
-- **No-verifier case — UNPROVEN.** Even Gate B and C used hard verifiers. CAG's behavior on purely
-  behavioral/judge feedback (no `s_gt`) is not directly validated and is bounded by the
-  robustness limits above (sycophancy is mitigated, not solved).
-- **Real-traffic behavior** (degeneracy / popularity-bias amplification): the standard defense
-  (exploration) is implemented but **not yet monitored**.
+- **Realistic recurring-query benchmark — IN PROGRESS.** The recurrence win (Gate D) is on a
+  *synthetic* hint corpus. The honest next step is the same result on a **real** corpus with
+  naturally recurring problem families (`sim/run_gate_recurring.py`, MBPP).
+- **No-verifier case — UNPROVEN.** Every gate above uses a hard verifier. Behavior on purely
+  behavioral/judge feedback (no `s_gt`) is bounded by the robustness limits below.
+- **Query-conditional clustering — EXPERIMENTAL.** The "reputation per query-kind" variant
+  exists in code but adds only ~1 pt over global counters and is **not validated** (cluster
+  stability / fragmentation / sparse-shrinkage). Treated as **future work**; every validated
+  result above uses global counters.
+- **Real-traffic degeneracy** (popularity-bias amplification): the exploration defense is
+  implemented but **not yet monitored**.
 
 ---
 
@@ -229,10 +259,11 @@ Reported honestly — what the tests/sims actually establish, and what they don'
 
 ```
 cag/                  core library (store, retriever, feedback, judge, ingest, api, store_sqlite)
-sim/                  simulations & gates: harness.py, verify_isolation.py, verify_robustness.py,
-                      run_gate_a.py (value), run_gate_b.py (decay), run_gate_c.py (HumanEval sweep),
-                      gate_c_verifier.py (real tests)
-data/                 HumanEval.jsonl (164 problems) — real verifier substrate for Gate C (sourced from OpenAI's HumanEval benchmark, MIT License)
+sim/                  gates: verify_robustness.py, run_gate_a.py (value), run_gate_b.py (decay),
+                      run_gate_c.py (no-recurrence boundary), run_gate_d.py (synthetic recurrence),
+                      run_gate_recurring.py (realistic recurrence, MBPP), gate_c_verifier.py
+data/                 HumanEval.jsonl (164 problems, OpenAI · MIT) and mbpp.jsonl (974 problems,
+                      Google MBPP · CC-BY-4.0) — real unit-test verifier substrates
 tests/                test_feedback.py, test_store_sqlite.py, test_robustness.py, test_api.py
 ROADMAP.md            phased build plan
 ```
@@ -240,19 +271,31 @@ ROADMAP.md            phased build plan
 ## Running tests & simulations
 
 ```bash
-python3 -m unittest discover -s tests -p "test_*.py"   # unit tests
-python3 sim/verify_robustness.py                       # 20-seed robustness ablation
-python3 sim/run_gate_a.py                              # Gate A: value vs static (10-seed, unbiased verifier)
-python3 sim/run_gate_b.py                              # Gate B: decay / freshness (10-seed staleness)
-python3 sim/run_gate_c.py                              # Gate C: real HumanEval verifier showcase sweep
-python3 sim/gate_c_verifier.py                         # Gate C verifier self-test
+python3 -m unittest discover -s tests -p "test_*.py"     # unit tests (35, no resource leaks)
+python3 sim/verify_robustness.py                         # robustness ablation (20-seed)
+python3 sim/run_gate_a.py                                # Gate A: value under recurrence (10-seed)
+python3 sim/run_gate_b.py                                # Gate B: decay / freshness (30-seed)
+python3 sim/run_gate_c.py                                # Gate C: no-recurrence boundary (needs Gemini)
+python3 sim/run_gate_recurring.py --selftest            # realistic benchmark: offline plumbing check
+USE_REAL_GEMINI=true python3 sim/run_gate_recurring.py   # realistic recurring benchmark (MBPP, real LLM)
 ```
 
-## Next steps
+## Future work
 
-2. **Degeneracy monitoring** (retrieval concentration / coverage) before any real deployment.
-3. **No-verifier validation** — CAG's behavior under purely behavioral/judge feedback.
-4. Package as a pip-installable layer over an existing retriever interface.
+1. **Realistic recurring-query benchmark** — reproduce the Gate D recurrence win on a *real*
+   corpus with naturally recurring problem families (MBPP), not the synthetic hint corpus.
+   (`sim/run_gate_recurring.py`.)
+2. **Query-conditional reputation (clustering).** Learn "what worked *for this kind of query*"
+   rather than globally. Implemented but **not validated** — needs evidence on cluster
+   stability, fragmentation, sparse-cluster shrinkage, and clustered-vs-global lift before it
+   is a claim rather than a proposal.
+3. **Strong-stack comparison.** *Strong Stack* vs *Strong Stack + CAG* (hybrid retrieval +
+   query rewriting + multi-query + agent memory), not just retriever-level. The eventual
+   deployment-relevant test.
+4. **No-verifier validation** — behavior under purely behavioral/judge feedback (e.g.
+   cross-model agreement as a pseudo-verifier).
+5. **Degeneracy monitoring** (retrieval concentration / coverage) before any real deployment.
+6. **Package** as a pip-installable layer over LangChain / LlamaIndex retriever interfaces.
 
 See `ROADMAP.md` for the full plan.
 

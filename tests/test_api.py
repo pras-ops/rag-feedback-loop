@@ -6,6 +6,7 @@ Tests /retrieve and /feedback HTTP endpoints and persistent SQLite side-effects.
 import os
 import tempfile
 import unittest
+from contextlib import closing
 from fastapi.testclient import TestClient
 
 # Create a temporary SQLite database file for testing
@@ -21,7 +22,7 @@ class TestAPI(unittest.TestCase):
         self.client = TestClient(app)
         
         # Clear database candidates and pending tables before each test
-        with store._connect() as conn:
+        with closing(store._connect()) as conn:
             conn.execute("DELETE FROM candidates")
             conn.execute("DELETE FROM pending")
             conn.commit()

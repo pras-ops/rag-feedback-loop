@@ -1,4 +1,4 @@
-# RAG Feedback & Exploration Loop Roadmap
+# CAG Feedback Layer (Retrieval Reputation Layer) Roadmap
 
 This document outlines the roadmap for transitioning from core mathematical validation in simulation to a production-ready API and deployment model.
 

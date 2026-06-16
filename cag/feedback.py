@@ -138,6 +138,7 @@ def update_counters(
     use_adt_denoising: bool = False,
     robust_estimator_mode: str = "beta",
     signals: Optional[OutcomeSignals] = None,
+    cluster_id: Optional[str] = None,
 ) -> None:
     """
     Updates Beta-counters (short-term alpha, beta and permanent A, B) for candidates
@@ -168,6 +169,7 @@ def update_counters(
         use_adt_denoising=use_adt_denoising,
         robust_estimator_mode=robust_estimator_mode,
         signals=signals,
+        cluster_id=cluster_id,
     )
 
 
@@ -182,9 +184,10 @@ def update_counters_from_shares(
     use_adt_denoising: bool = False,
     robust_estimator_mode: str = "beta",
     signals: Optional[OutcomeSignals] = None,
+    cluster_id: Optional[str] = None,
 ) -> None:
     """
-    Updates Beta-counters using pre-computed credit shares (e.g. looked up from pending response mapping).
+    Updates Beta-counters using pre-computed credit shares.
     """
     if not shares:
         return
@@ -222,7 +225,6 @@ def update_counters_from_shares(
             import math
             c_robust_val = calculate_robust_estimate(candidate, robust_estimator_mode)
             loss = abs(y_credited - c_robust_val)
-            # w(loss) = exp(-loss^2 / (2 * sigma^2)) with sigma = 0.40
             kappa_eff = kappa * math.exp(-(loss ** 2) / 0.32)
 
         d_alpha = kappa_eff * share_val * y
@@ -241,12 +243,14 @@ def update_counters_from_shares(
                 d_fooled=d_fooled,
                 d_verified=d_verified,
                 recent_outcome=y_credited,
+                cluster_id=cluster_id,
                 now=current_timestamp
             )
         else:
             # In-memory CandidateStore updates
-            # Decay short term alpha/beta first
-            dt = current_timestamp - candidate.last_updated
+            # Decay short term counters first based on last_confirmed timestamp
+            last_confirmed = candidate.last_confirmed
+            dt = current_timestamp - last_confirmed
             if dt > 0 and decay_unit_sec > 0:
                 days = dt / decay_unit_sec
                 decay_factor = gamma ** days
@@ -263,6 +267,48 @@ def update_counters_from_shares(
             candidate.recent_outcomes.append(y_credited)
             if len(candidate.recent_outcomes) > 30:
                 candidate.recent_outcomes.pop(0)
+
+            # Update conditional cluster counters if cluster_id is set
+            if cluster_id:
+                if not hasattr(candidate, "cluster_counters") or candidate.cluster_counters is None:
+                    candidate.cluster_counters = {}
+                if cluster_id not in candidate.cluster_counters:
+                    candidate.cluster_counters[cluster_id] = {
+                        "alpha": 1.0,
+                        "beta": 1.0,
+                        "A": 1.0,
+                        "B": 1.0,
+                        "fooled": 0.0,
+                        "verified": 0.0,
+                        "recent_outcomes": [],
+                        "last_confirmed": current_timestamp,
+                    }
+                cc = candidate.cluster_counters[cluster_id]
+                cc_lc = cc.get("last_confirmed", current_timestamp)
+                cc_dt = current_timestamp - cc_lc
+                if cc_dt > 0 and decay_unit_sec > 0:
+                    cc_days = cc_dt / decay_unit_sec
+                    cc_decay_factor = gamma ** cc_days
+                    cc["alpha"] = 1.0 + (cc.get("alpha", 1.0) - 1.0) * cc_decay_factor
+                    cc["beta"] = 1.0 + (cc.get("beta", 1.0) - 1.0) * cc_decay_factor
+
+                cc["alpha"] = cc.get("alpha", 1.0) + d_alpha
+                cc["beta"] = cc.get("beta", 1.0) + d_beta
+                cc["A"] = cc.get("A", 1.0) + d_A
+                cc["B"] = cc.get("B", 1.0) + d_B
+                cc["fooled"] = cc.get("fooled", 0.0) + d_fooled
+                cc["verified"] = cc.get("verified", 0.0) + d_verified
+                cc_outcomes = cc.get("recent_outcomes", [])
+                cc_outcomes.append(y_credited)
+                if len(cc_outcomes) > 30:
+                    cc_outcomes.pop(0)
+                cc["recent_outcomes"] = cc_outcomes
+                if y > 0.5:
+                    cc["last_confirmed"] = current_timestamp
+                candidate.cluster_counters[cluster_id] = cc
+
+            if y > 0.5:
+                candidate.last_confirmed = current_timestamp
             candidate.last_updated = current_timestamp
             store.update_candidate(candidate)
 
@@ -277,6 +323,7 @@ def update_counters_with_signals(
     use_liar_counter: bool = True,
     use_adt_denoising: bool = False,
     robust_estimator_mode: str = "beta",
+    cluster_id: Optional[str] = None,
 ) -> None:
     """
     Updates Beta-counters for a set of candidates using pre-computed credit shares
@@ -345,11 +392,13 @@ def update_counters_with_signals(
                 d_fooled=d_fooled,
                 d_verified=d_verified,
                 recent_outcome=y_credited,
+                cluster_id=cluster_id,
                 now=current_timestamp
             )
         else:
             # Decay short term counters first
-            dt = current_timestamp - candidate.last_updated
+            last_confirmed = candidate.last_confirmed
+            dt = current_timestamp - last_confirmed
             if dt > 0 and decay_unit_sec > 0:
                 days = dt / decay_unit_sec
                 decay_factor = gamma ** days
@@ -365,5 +414,47 @@ def update_counters_with_signals(
             candidate.recent_outcomes.append(y_credited)
             if len(candidate.recent_outcomes) > 30:
                 candidate.recent_outcomes.pop(0)
+
+            # Update conditional cluster counters if cluster_id is set
+            if cluster_id:
+                if not hasattr(candidate, "cluster_counters") or candidate.cluster_counters is None:
+                    candidate.cluster_counters = {}
+                if cluster_id not in candidate.cluster_counters:
+                    candidate.cluster_counters[cluster_id] = {
+                        "alpha": 1.0,
+                        "beta": 1.0,
+                        "A": 1.0,
+                        "B": 1.0,
+                        "fooled": 0.0,
+                        "verified": 0.0,
+                        "recent_outcomes": [],
+                        "last_confirmed": current_timestamp,
+                    }
+                cc = candidate.cluster_counters[cluster_id]
+                cc_lc = cc.get("last_confirmed", current_timestamp)
+                cc_dt = current_timestamp - cc_lc
+                if cc_dt > 0 and decay_unit_sec > 0:
+                    cc_days = cc_dt / decay_unit_sec
+                    cc_decay_factor = gamma ** cc_days
+                    cc["alpha"] = 1.0 + (cc.get("alpha", 1.0) - 1.0) * cc_decay_factor
+                    cc["beta"] = 1.0 + (cc.get("beta", 1.0) - 1.0) * cc_decay_factor
+
+                cc["alpha"] = cc.get("alpha", 1.0) + d_alpha
+                cc["beta"] = cc.get("beta", 1.0) + d_beta
+                cc["A"] = cc.get("A", 1.0) + d_A
+                cc["B"] = cc.get("B", 1.0) + d_B
+                cc["fooled"] = cc.get("fooled", 0.0) + d_fooled
+                cc["verified"] = cc.get("verified", 0.0) + d_verified
+                cc_outcomes = cc.get("recent_outcomes", [])
+                cc_outcomes.append(y_credited)
+                if len(cc_outcomes) > 30:
+                    cc_outcomes.pop(0)
+                cc["recent_outcomes"] = cc_outcomes
+                if y > 0.5:
+                    cc["last_confirmed"] = current_timestamp
+                candidate.cluster_counters[cluster_id] = cc
+
+            if y > 0.5:
+                candidate.last_confirmed = current_timestamp
             candidate.last_updated = current_timestamp
             store.update_candidate(candidate)

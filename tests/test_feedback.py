@@ -236,6 +236,66 @@ class TestFeedbackMath(unittest.TestCase):
         self.assertAlmostEqual(decayed_candidate.beta, 2.62)
         self.assertEqual(decayed_candidate.last_updated, current_time)
 
+    def test_dual_update_global_and_cluster(self):
+        """Verifies that update_counters updates both global and cluster counters."""
+        retrieved_sims = {"c1": 1.0}
+        y = 1.0
+        update_counters(
+            store=self.store,
+            retrieved_sims=retrieved_sims,
+            y=y,
+            current_timestamp=100.0,
+            gamma=1.0,
+            cluster_id="cluster_test"
+        )
+        c1 = self.store.get_candidate("c1")
+        # Global should increase (initial alpha=1.0)
+        self.assertGreater(c1.alpha, 1.0)
+        # Cluster-specific should also exist and increase (prior alpha starts at 1.0)
+        cc = c1.get_cluster("cluster_test")
+        self.assertGreater(cc["alpha"], 1.0)
+
+    def test_recency_decay_preserves_active_doc(self):
+        """Verifies that documents confirmed frequently hold their reputation, while idle ones decay."""
+        c1 = Candidate(id="c_active", content="active", alpha=5.0, beta=1.0, last_confirmed=0.0, last_updated=0.0)
+        c2 = Candidate(id="c_idle", content="idle", alpha=5.0, beta=1.0, last_confirmed=0.0, last_updated=0.0)
+        self.store.add_candidate(c1)
+        self.store.add_candidate(c2)
+
+        # Decay unit is 1.0 sec. We do steps from t=1 to t=10.
+        for t in range(1, 11):
+            update_counters(
+                store=self.store,
+                retrieved_sims={"c_active": 1.0},
+                y=1.0,
+                current_timestamp=float(t),
+                gamma=0.5,
+                decay_unit_sec=1.0
+            )
+
+        from cag.retriever import Retriever
+        retriever = Retriever(self.store, weights=(1.0, 0.0, 0.0, 0.0))
+        res = retriever.retrieve({"c_active": 1.0, "c_idle": 1.0}, top_k=2, explore=False, current_timestamp=10.0, gamma=0.5, decay_unit_sec=1.0)
+        
+        c_active_dec = next(c for c, _, _ in res if c.id == "c_active")
+        c_idle_dec = next(c for c, _, _ in res if c.id == "c_idle")
+
+        self.assertGreater(c_active_dec.alpha, 2.9)
+        self.assertLess(c_idle_dec.alpha, 1.1)
+
+    def test_kappa_ambiguous_outcome(self):
+        """Verifies that an ambiguous outcome (y ≈ 0.5) barely moves counters."""
+        y = 0.51
+        update_counters(
+            store=self.store,
+            retrieved_sims={"c1": 1.0},
+            y=y,
+            current_timestamp=100.0,
+            gamma=1.0
+        )
+        c1 = self.store.get_candidate("c1")
+        self.assertLess(c1.alpha, 1.02)
+
 
 if __name__ == "__main__":
     unittest.main()

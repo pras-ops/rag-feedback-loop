@@ -40,4 +40,7 @@ data/*.gz
 *.gz
 .cache/
 .huggingface/
+scratch/
+data/mbpp.jsonl
+sim/run_gate_recurring.py
 

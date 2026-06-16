@@ -3,6 +3,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from cag.store import Candidate
 from cag.store_sqlite import SqliteCandidateStore
 from cag.feedback import (
@@ -25,10 +26,10 @@ class TestRobustnessUpgrades(unittest.TestCase):
     def test_schema_migration_fresh_and_legacy(self):
         # 1. Test fresh DB initialization
         store = SqliteCandidateStore(self.db_path)
-        with store._connect() as conn:
-            # Check user_version is 1
+        with closing(store._connect()) as conn:
+            # Check user_version is 2
             version = conn.execute("PRAGMA user_version").fetchone()[0]
-            self.assertEqual(version, 1)
+            self.assertEqual(version, 2)
             # Check table structure
             cols = [r["name"] for r in conn.execute("PRAGMA table_info(candidates)").fetchall()]
             self.assertIn("fooled", cols)
@@ -58,11 +59,11 @@ class TestRobustnessUpgrades(unittest.TestCase):
         conn_legacy.commit()
         conn_legacy.close()
 
-        # Load store - should run migrations and bump user_version to 1
+        # Load store - should run migrations and bump user_version to 2
         store_legacy = SqliteCandidateStore(self.db_path)
-        with store_legacy._connect() as conn:
+        with closing(store_legacy._connect()) as conn:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
-            self.assertEqual(version, 1)
+            self.assertEqual(version, 2)
             cols = [r["name"] for r in conn.execute("PRAGMA table_info(candidates)").fetchall()]
             self.assertIn("fooled", cols)
             self.assertIn("verified", cols)
