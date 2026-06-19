@@ -290,6 +290,29 @@ python3 sim/run_gate_recurring.py --selftest            # realistic benchmark: o
 USE_REAL_GEMINI=true python3 sim/run_gate_recurring.py   # realistic recurring benchmark (MBPP, real LLM)
 ```
 
+## Related work
+
+CAG sits between two active areas, and is deliberately a *smaller* mechanism than either.
+Full positioning + citations in [RELATED_WORK.md](RELATED_WORK.md).
+
+- **Agent memory / experience reuse** — Evo-Memory + ReMem ([arXiv:2511.20857](https://arxiv.org/abs/2511.20857)),
+  ExpeL, Agent Workflow Memory, Dynamic Cheatsheet, Agentic Context Engineering. These
+  *extract and inject* workflows/insights at the prompt level. **CAG works one level lower** —
+  per-document Beta reputation at the *ranking* level, writing no new memory artifacts and
+  putting no LLM in the memory loop.
+- **Online / feedback RAG reranking & LTR** — DynamicRAG, AutoRAG-HP, LTRR, Online-Optimized
+  RAG, REARANK. These *train/prompt a reranker* from feedback. **CAG keeps the reranker fixed**
+  and adds a non-parametric reputation prior with staleness decay, noise/sycophancy safeguards,
+  and a stated boundary condition.
+- **Statistical lineage (not novel, by design)** — Beta Reputation System (Jøsang & Ismail
+  2002), Beta-Bernoulli click models, bandit learning-to-rank. The contribution is the clean,
+  safeguarded, honestly-evaluated *integration*, not the estimator.
+- **Evaluation honesty** — aligns with ["Benchmarking is Broken"](https://arxiv.org/html/2510.07575v2);
+  CAG independently caught and fixed an LLM-judge circularity (see Gate A history).
+
+**Not yet compared on** the standard streaming benchmark (Evo-Memory) or a strong full stack —
+see [RELATED_WORK.md](RELATED_WORK.md) for the honest gap list.
+
 ## Future work
 
 1. **Realistic recurring-query benchmark** — reproduce the Gate D recurrence win on a *real*
