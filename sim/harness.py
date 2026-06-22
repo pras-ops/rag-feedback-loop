@@ -14,12 +14,12 @@ import sys
 import time
 from typing import Dict, List, Tuple, Optional
 
-# Add parent directory to path so we can import cag package
+# Add parent directory to path so we can import rrl package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cag.store import Candidate, CandidateStore
-from cag.retriever import Retriever
-from cag.feedback import OutcomeSignals, calculate_outcome, update_counters
+from rrl.store import Candidate, CandidateStore
+from rrl.retriever import Retriever
+from rrl.feedback import OutcomeSignals, calculate_outcome, update_counters
 
 
 # Simulation Configuration

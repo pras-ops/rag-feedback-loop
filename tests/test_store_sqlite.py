@@ -14,8 +14,8 @@ import unittest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cag.store import Candidate
-from cag.store_sqlite import SqliteCandidateStore
+from rrl.store import Candidate
+from rrl.store_sqlite import SqliteCandidateStore
 
 
 class TestSqliteCandidateStore(unittest.TestCase):

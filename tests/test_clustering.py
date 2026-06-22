@@ -4,8 +4,8 @@ import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cag.clustering import QueryClusterer
-from cag.store import CandidateStore
+from rrl.clustering import QueryClusterer
+from rrl.store import CandidateStore
 
 
 class TestQueryClustering(unittest.TestCase):

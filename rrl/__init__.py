@@ -1,5 +1,5 @@
 """
-CAG Core Logic Package
+RRL Core Logic Package
 RAG Feedback and Exploration Loop implementation.
 """
 

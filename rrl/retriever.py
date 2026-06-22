@@ -1,5 +1,5 @@
 """
-CAG Retriever Implementation
+RRL Retriever Implementation
 Implements hybrid retrieval (vector + BM25 RRF-fused), normalized sim scores,
 and combines them with short-term (Beta sampled or expectation) and permanent usefulness.
 Supports both real text queries (via SentenceTransformer + BM25) and pre-computed similarity scores.

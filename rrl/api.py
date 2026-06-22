@@ -1,5 +1,5 @@
 """
-CAG FastAPI Application (Phase 4).
+RRL FastAPI Application (Phase 4).
 Exposes POST /retrieve and POST /feedback endpoints.
 """
 
@@ -9,21 +9,21 @@ from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
-from cag.store import Candidate
-from cag.store_sqlite import SqliteCandidateStore
-from cag.retriever import Retriever
-from cag.feedback import OutcomeSignals, update_counters_with_signals
+from rrl.store import Candidate
+from rrl.store_sqlite import SqliteCandidateStore
+from rrl.retriever import Retriever
+from rrl.feedback import OutcomeSignals, update_counters_with_signals
 
 app = FastAPI(
-    title="CAG Feedback & Exploration Loop API",
+    title="RRL Feedback & Exploration Loop API",
     description="API for Phase 4 persistent store retrieval and feedback updates",
     version="1.0.0"
 )
 
 # Configuration from env variables
-DB_PATH = os.getenv("CAG_DB_PATH", "cag.db")
-DECAY_UNIT_SEC = float(os.getenv("CAG_DECAY_UNIT_SEC", "86400.0"))
-GAMMA = float(os.getenv("CAG_GAMMA", "0.98"))
+DB_PATH = os.getenv("RRL_DB_PATH", "rrl.db")
+DECAY_UNIT_SEC = float(os.getenv("RRL_DECAY_UNIT_SEC", "86400.0"))
+GAMMA = float(os.getenv("RRL_GAMMA", "0.98"))
 
 # Initialize components (lazily initialized or created at startup)
 store = SqliteCandidateStore(db_path=DB_PATH, gamma=GAMMA, decay_unit_sec=DECAY_UNIT_SEC)

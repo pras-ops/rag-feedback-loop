@@ -1,5 +1,5 @@
 """
-CAG LLM Judge Module
+RRL LLM Judge Module
 Integrates google-genai to evaluate faithfulness of retrieved chunks.
 Provides a local token-overlap fallback when offline or unauthenticated.
 Includes per-call timeout (30s) and single retry with backoff.
@@ -7,7 +7,7 @@ Includes per-call timeout (30s) and single retry with backoff.
 
 import os
 import re
-import signal
+import concurrent.futures
 import time
 from typing import Optional
 from pydantic import BaseModel, Field
@@ -25,14 +25,6 @@ _CLIENT_INITIALIZED = False
 
 # Timeout per API call in seconds
 _CALL_TIMEOUT_SEC = 30
-
-
-class _TimeoutError(Exception):
-    pass
-
-
-def _timeout_handler(signum, frame):
-    raise _TimeoutError("Gemini API call timed out")
 
 
 class FaithfulnessRating(BaseModel):
@@ -124,44 +116,39 @@ def evaluate_faithfulness(
         f"Generated Answer: {generated_answer}\n"
     )
 
-    for attempt in range(max_retries + 1):
-        try:
-            # Set per-call timeout via SIGALRM
-            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-            signal.alarm(_CALL_TIMEOUT_SEC)
+    def _invoke():
+        return client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=FaithfulnessRating,
+                temperature=0.0,
+            ),
+        )
 
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=FaithfulnessRating,
-                    temperature=0.0,
-                ),
-            )
-
-            # Cancel alarm on success
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old_handler)
-
-            rating: FaithfulnessRating = response.parsed
-            return max(0.0, min(1.0, rating.score))
-
-        except _TimeoutError:
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old_handler)
-            print(f"[Judge Warning] Gemini call timed out (attempt {attempt + 1}/{max_retries + 1}).")
-        except Exception as e:
-            signal.alarm(0)
+    # Portable per-call timeout: run the blocking SDK call in a worker thread and
+    # bound it with future.result(timeout=...). Unlike signal.SIGALRM this works
+    # off the main thread (e.g. FastAPI's threadpool) and on Windows.
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        for attempt in range(max_retries + 1):
             try:
-                signal.signal(signal.SIGALRM, old_handler)
-            except Exception:
-                pass
-            print(f"[Judge Warning] Gemini call failed ({e}) (attempt {attempt + 1}/{max_retries + 1}).")
+                response = executor.submit(_invoke).result(timeout=_CALL_TIMEOUT_SEC)
+                rating: FaithfulnessRating = response.parsed
+                return max(0.0, min(1.0, rating.score))
 
-        # Backoff before retry
-        if attempt < max_retries:
-            time.sleep(2 ** attempt)
+            except concurrent.futures.TimeoutError:
+                print(f"[Judge Warning] Gemini call timed out (attempt {attempt + 1}/{max_retries + 1}).")
+            except Exception as e:
+                print(f"[Judge Warning] Gemini call failed ({e}) (attempt {attempt + 1}/{max_retries + 1}).")
+
+            # Backoff before retry
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+    finally:
+        # Do not block on a still-running (timed-out) call.
+        executor.shutdown(wait=False)
 
     # All retries exhausted — fall back to heuristic
     print("[Judge] Falling back to heuristic overlap judge.")

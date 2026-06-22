@@ -374,18 +374,3 @@ class SqliteCandidateStore:
                 "DELETE FROM pending WHERE created < ?", (now - max_age_sec,)
             )
             return conn.total_changes
-
-    def save_setting(self, key: str, value: str) -> None:
-        with self._txn() as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-                (key, value)
-            )
-
-    def get_setting(self, key: str) -> Optional[str]:
-        with self._txn() as conn:
-            row = conn.execute(
-                "SELECT value FROM settings WHERE key = ?",
-                (key,)
-            ).fetchone()
-            return row["value"] if row else None

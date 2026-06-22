@@ -1,5 +1,5 @@
 """
-CAG Ingestion Module
+RRL Ingestion Module
 Handles document chunking and vector embedding generation using sentence-transformers.
 """
 

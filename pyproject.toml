@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retrieval-reputation-layer"
+version = "0.1.0"
+description = "RRL — a lightweight retrieval reputation layer that folds verified downstream outcomes into ranking (per-document Beta reputation with staleness decay and sycophancy safeguards)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "pras-ops", email = "prashantjacob.bilaspur@gmail.com" },
+]
+keywords = ["rag", "retrieval", "reranking", "reputation", "online-learning", "bandit", "agent-memory"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Core retrieval. Loose lower bounds for library consumers; requirements.txt
+# pins exact versions for reproducing the benchmark gates.
+dependencies = [
+    "sentence-transformers>=2.2",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "scikit-learn>=1.2",
+]
+
+[project.optional-dependencies]
+# FastAPI service (POST /retrieve, POST /feedback, GET /health)
+api = [
+    "fastapi>=0.100",
+    "uvicorn>=0.23",
+    "pydantic>=2.0",
+]
+# Live LLM faithfulness judge (falls back to a local heuristic without it)
+llm = [
+    "google-genai>=1.0",
+]
+# Simulations, plots, and the test suite
+dev = [
+    "matplotlib>=3.7",
+    "pytest>=7.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/pras-ops/retrieval-reputation-layer"
+Repository = "https://github.com/pras-ops/retrieval-reputation-layer"
+
+[tool.setuptools]
+packages = ["rrl"]

@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Packaging / build artifacts
+*.egg-info/
+.eggs/
+build/
+dist/
+
 # Database files
 *.db
 *.sqlite
@@ -41,6 +47,4 @@ data/*.gz
 .cache/
 .huggingface/
 scratch/
-data/mbpp.jsonl
-sim/run_gate_recurring.py
 

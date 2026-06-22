@@ -1,8 +1,8 @@
 """
-CAG Phase C Validation: Real HumanEval Showcase (10-Seed Sweep)
+RRL Phase C Validation: Real HumanEval Showcase (10-Seed Sweep)
 Ingests coding hint documents (good vs distractor) for 5 HumanEval problems.
 Static similarity-only retrieval gets fooled by query-dense distractor hints.
-CAG feedback loop learns from unit-test results (s_gt) to suppress distractors.
+RRL feedback loop learns from unit-test results (s_gt) to suppress distractors.
 Saves comparison plots to sim/gate_c_comparison.png.
 """
 
@@ -16,14 +16,14 @@ import sys
 import time
 from typing import List, Dict, Tuple, Optional
 
-# Add parent directory to path so we can import cag package
+# Add parent directory to path so we can import rrl package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cag.store import Candidate, CandidateStore
-from cag.ingest import Ingester
-from cag.retriever import Retriever
-from cag.feedback import OutcomeSignals, calculate_outcome, update_counters
-from cag.judge import _get_client
+from rrl.store import Candidate, CandidateStore
+from rrl.ingest import Ingester
+from rrl.retriever import Retriever
+from rrl.feedback import OutcomeSignals, calculate_outcome, update_counters
+from rrl.judge import _get_client
 from sim.gate_c_verifier import load_humaneval, run_tests
 from sentence_transformers import CrossEncoder
 
@@ -177,7 +177,7 @@ def run_simulation(
     shared_model: Optional[object] = None, 
     cross_encoder: Optional[object] = None
 ) -> List[float]:
-    """Runs simulation for a given configuration (explore_mode True=CAG, False=Static)."""
+    """Runs simulation for a given configuration (explore_mode True=RRL, False=Static)."""
     random.seed(seed)
     
     # Dynamically generate hint corpus and query mappings for these problems
@@ -240,7 +240,7 @@ def run_simulation(
 
         # Retrieve hint document
         if explore_mode:
-            # CAG Feedback Loop uses top_k=1 and Thompson sampling
+            # RRL Feedback Loop uses top_k=1 and Thompson sampling
             res = retriever.retrieve(
                 query_text,
                 top_k=1,
@@ -284,7 +284,7 @@ def run_simulation(
         
         correctness_history.append(s_gt)
 
-        # Update feedback counters if CAG
+        # Update feedback counters if RRL
         if explore_mode:
             signals = OutcomeSignals(
                 s_behave=0.75 if s_gt > 0.5 else 0.10,
@@ -326,7 +326,7 @@ def calculate_stats(data: List[float]) -> Tuple[float, float, float, float]:
 def main():
 
     print("=" * 110)
-    print("CAG PHASE C VALIDATION RUNNER: REAL HUMANEVAL UNIT-TEST VERIFIER SHOWCASE (10-SEED SWEEP)")
+    print("RRL PHASE C VALIDATION RUNNER: REAL HUMANEVAL UNIT-TEST VERIFIER SHOWCASE (10-SEED SWEEP)")
     print("=" * 110)
 
     use_real = os.getenv("USE_REAL_GEMINI", "true").lower() == "true"
@@ -358,7 +358,7 @@ def main():
     for seed in seeds:
         # Run Static (explore=False) with Cross-Encoder reranker
         s_hist = run_simulation(seed, problems, num_steps, explore_mode=False, shared_model=shared_model, cross_encoder=cross_encoder)
-        # Run CAG (explore=True)
+        # Run RRL (explore=True)
         c_hist = run_simulation(seed, problems, num_steps, explore_mode=True, shared_model=shared_model)
 
         for step in range(num_steps):
@@ -371,7 +371,7 @@ def main():
         cag_seed_correctness.append(sum(c_hist) / num_steps)
         cag_seed_late_correctness.append(sum(c_hist[-15:]) / 15.0)
 
-        print(f"Seed {seed} finished. [Static Correctness={sum(s_hist)/num_steps:.2f} | CAG={sum(c_hist)/num_steps:.2f}]")
+        print(f"Seed {seed} finished. [Static Correctness={sum(s_hist)/num_steps:.2f} | RRL={sum(c_hist)/num_steps:.2f}]")
 
     # Calculate overall sweep stats
     static_overall = calculate_stats(static_seed_correctness)
@@ -381,9 +381,9 @@ def main():
     cag_late = calculate_stats(cag_seed_late_correctness)
 
     print("\n" + "=" * 115)
-    print("DECISION-GRADE GATE C RESULTS: STATIC VS CAG RETRIEVER (10-SEED SWEEP, REAL UNIT TESTS)")
+    print("DECISION-GRADE GATE C RESULTS: STATIC VS RRL RETRIEVER (10-SEED SWEEP, REAL UNIT TESTS)")
     print("=" * 115)
-    print(f"{'Metric / Stage':<35} | {'Static (Mean±Std [95% CI])':<38} | {'CAG (Mean±Std [95% CI])':<38}")
+    print(f"{'Metric / Stage':<35} | {'Static (Mean±Std [95% CI])':<38} | {'RRL (Mean±Std [95% CI])':<38}")
     print("-" * 115)
     print(f"{'Overall Unit Test Pass Rate':<35} | {static_overall[0]:.3f}±{static_overall[1]:.3f} [{static_overall[2]:.3f}, {static_overall[3]:.3f}] | {cag_overall[0]:.3f}±{cag_overall[1]:.3f} [{cag_overall[2]:.3f}, {cag_overall[3]:.3f}]")
     print(f"{'Late-Stage Pass Rate (Last 15)':<35} | {static_late[0]:.3f}±{static_late[1]:.3f} [{static_late[2]:.3f}, {static_late[3]:.3f}] | {cag_late[0]:.3f}±{cag_late[1]:.3f} [{cag_late[2]:.3f}, {cag_late[3]:.3f}]")
@@ -403,7 +403,7 @@ def main():
 
         plt.figure(figsize=(10, 6))
         plt.plot(moving_average(static_step_correctness), label="Static Baseline (Cross-Encoder Reranked)", color="#dc2626", linewidth=2.5, linestyle="--")
-        plt.plot(moving_average(cag_step_correctness), label="CAG Feedback Loop (Thompson Sampling)", color="#2563eb", linewidth=3.0)
+        plt.plot(moving_average(cag_step_correctness), label="RRL Feedback Loop (Thompson Sampling)", color="#2563eb", linewidth=3.0)
         
         plt.title("Gate C: HumanEval Unit Test Pass Rate Learning Curve\n(10-Seed Average - 5-Step Moving Average)", fontsize=12, fontweight="bold")
         plt.xlabel("Query Step", fontsize=10)
