@@ -1,5 +1,5 @@
 """
-CAG Feedback and Counter Update Logic
+RRL Feedback and Counter Update Logic
 Implements the feedback aggregation outcome (y) and the soft,
 confidence-weighted update step (κ) with exponential decay (γ).
 """

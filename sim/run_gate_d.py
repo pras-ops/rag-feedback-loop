@@ -1,10 +1,10 @@
 """
-CAG Phase D Validation: Recurring-Query Benchmark
-Evaluates CAG against a strong Cross-Encoder baseline under high query recurrence.
+RRL Phase D Validation: Recurring-Query Benchmark
+Evaluates RRL against a strong Cross-Encoder baseline under high query recurrence.
 Compares:
   - Baseline (top-5 RRF + Cross-Encoder Reranked to top-1)
-  - CAG-global (CAG feedback loop, global counters only, optimistic prior OFF)
-  - CAG-full (CAG feedback loop with query-conditional clustering, shrinkage, optimistic prior, and explore floor)
+  - RRL-global (RRL feedback loop, global counters only, optimistic prior OFF)
+  - RRL-full (RRL feedback loop with query-conditional clustering, shrinkage, optimistic prior, and explore floor)
 """
 
 import argparse
@@ -15,13 +15,13 @@ import re
 import sys
 from typing import List, Dict, Tuple, Optional
 
-# Add parent directory to path so we can import cag package
+# Add parent directory to path so we can import rrl package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cag.store import Candidate, CandidateStore
-from cag.ingest import Ingester
-from cag.retriever import Retriever
-from cag.feedback import OutcomeSignals, calculate_outcome, update_counters
+from rrl.store import Candidate, CandidateStore
+from rrl.ingest import Ingester
+from rrl.retriever import Retriever
+from rrl.feedback import OutcomeSignals, calculate_outcome, update_counters
 from sim.gate_c_verifier import load_humaneval, run_tests
 from sim.run_gate_c import generate_answer, calculate_stats, run_tests_wrapper
 
@@ -112,7 +112,7 @@ def run_simulation(
 
         # Retrieve hint document
         if explore_mode:
-            # CAG Feedback Loop uses top_k=1 and Thompson sampling
+            # RRL Feedback Loop uses top_k=1 and Thompson sampling
             res = retriever.retrieve(
                 query_text,
                 top_k=1,
@@ -156,7 +156,7 @@ def run_simulation(
         
         correctness_history.append(s_gt)
 
-        # Update feedback counters if CAG
+        # Update feedback counters if RRL
         if explore_mode:
             signals = OutcomeSignals(
                 s_behave=0.75 if s_gt > 0.5 else 0.10,
@@ -183,12 +183,12 @@ def run_simulation(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="CAG Gate D Recurring Query Validation Sweep")
+    parser = argparse.ArgumentParser(description="RRL Gate D Recurring Query Validation Sweep")
     parser.add_argument("--smoke", action="store_true", help="Run a cheap early smoke test")
     args = parser.parse_args()
 
     print("=" * 110)
-    print("CAG PHASE D VALIDATION RUNNER: RECURRING-QUERY BENCHMARK")
+    print("RRL PHASE D VALIDATION RUNNER: RECURRING-QUERY BENCHMARK")
     print("=" * 110)
 
     use_real = os.getenv("USE_REAL_GEMINI", "true").lower() == "true"
@@ -230,7 +230,7 @@ def main():
     cag_full_seed_correctness = []
     cag_full_seed_late_correctness = []
 
-    # Run Static, CAG-global, and CAG-full across all seeds
+    # Run Static, RRL-global, and RRL-full across all seeds
     for seed in seeds:
         print(f"\n--- Starting Seed {seed} ---", flush=True)
         # Run Static Baseline
@@ -244,7 +244,7 @@ def main():
             shared_model=shared_model, 
             cross_encoder=cross_encoder
         )
-        # Run CAG (global counters only, optimistic prior OFF)
+        # Run RRL (global counters only, optimistic prior OFF)
         c_hist = run_simulation(
             seed=seed, 
             problems=problems, 
@@ -254,7 +254,7 @@ def main():
             use_optimistic_prior=False, 
             shared_model=shared_model
         )
-        # Run CAG-full (clustering ON, optimistic prior ON)
+        # Run RRL-full (clustering ON, optimistic prior ON)
         cf_hist = run_simulation(
             seed=seed, 
             problems=problems, 
@@ -280,7 +280,7 @@ def main():
         cag_full_seed_correctness.append(sum(cf_hist) / total_steps)
         cag_full_seed_late_correctness.append(sum(cf_hist[-late_steps:]) / late_steps)
 
-        print(f"Seed {seed} finished. [Static={sum(s_hist)/total_steps:.3f} | CAG-global={sum(c_hist)/total_steps:.3f} | CAG-full={sum(cf_hist)/total_steps:.3f}]", flush=True)
+        print(f"Seed {seed} finished. [Static={sum(s_hist)/total_steps:.3f} | RRL-global={sum(c_hist)/total_steps:.3f} | RRL-full={sum(cf_hist)/total_steps:.3f}]", flush=True)
 
     static_overall = calculate_stats(static_seed_correctness)
     static_late = calculate_stats(static_seed_late_correctness)
@@ -297,7 +297,7 @@ def main():
     else:
         print("GATE D FULL BENCHMARK RESULTS (10 SEEDS, 50 PROBLEMS, 10 EPOCHS)")
     print("=" * 140)
-    print(f"{'Metric / Stage':<35} | {'Static (Mean±Std)':<30} | {'CAG-global (Mean±Std)':<30} | {'CAG-full (Mean±Std)':<30}")
+    print(f"{'Metric / Stage':<35} | {'Static (Mean±Std)':<30} | {'RRL-global (Mean±Std)':<30} | {'RRL-full (Mean±Std)':<30}")
     print("-" * 140)
     print(f"{'Overall Unit Test Pass Rate':<35} | {static_overall[0]:.3f}±{static_overall[1]:.3f} {'':<20} | {cag_overall[0]:.3f}±{cag_overall[1]:.3f} {'':<20} | {cag_full_overall[0]:.3f}±{cag_full_overall[1]:.3f}")
     print(f"{'Late-Stage Pass Rate':<35} | {static_late[0]:.3f}±{static_late[1]:.3f} {'':<20} | {cag_late[0]:.3f}±{cag_late[1]:.3f} {'':<20} | {cag_full_late[0]:.3f}±{cag_full_late[1]:.3f}")
@@ -317,8 +317,8 @@ def main():
 
         plt.figure(figsize=(11, 7))
         plt.plot(moving_average(static_step_correctness), label="Static Baseline (Cross-Encoder Reranked)", color="#dc2626", linewidth=2.0, linestyle="--")
-        plt.plot(moving_average(cag_step_correctness), label="CAG-global (Thompson Sampling - Global counters only)", color="#f59e0b", linewidth=2.2, linestyle=":")
-        plt.plot(moving_average(cag_full_step_correctness), label="CAG-full (Thompson Sampling + Query-Conditional Clustering + Shrinkage)", color="#2563eb", linewidth=2.8)
+        plt.plot(moving_average(cag_step_correctness), label="RRL-global (Thompson Sampling - Global counters only)", color="#f59e0b", linewidth=2.2, linestyle=":")
+        plt.plot(moving_average(cag_full_step_correctness), label="RRL-full (Thompson Sampling + Query-Conditional Clustering + Shrinkage)", color="#2563eb", linewidth=2.8)
         
         title_suffix = "Smoke Test" if args.smoke else "Full Sweep"
         plt.title(f"Gate D: {title_suffix} - HumanEval Unit Test Pass Rate Learning Curve\n(Average over Seeds - 25-Step Moving Average)", fontsize=12, fontweight="bold")

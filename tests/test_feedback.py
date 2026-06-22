@@ -1,11 +1,11 @@
 """
-Unit Tests for CAG Feedback Loop Counters and Calculations
+Unit Tests for RRL Feedback Loop Counters and Calculations
 Tests ground-truth anchoring, credit smoothing, decay logic, and counter updating.
 """
 
 import unittest
-from cag.store import Candidate, CandidateStore
-from cag.feedback import OutcomeSignals, calculate_outcome, update_counters
+from rrl.store import Candidate, CandidateStore
+from rrl.feedback import OutcomeSignals, calculate_outcome, update_counters
 
 
 class TestFeedbackMath(unittest.TestCase):
@@ -208,7 +208,7 @@ class TestFeedbackMath(unittest.TestCase):
 
     def test_decay_on_read(self):
         """Verifies that Retriever.retrieve decays alpha/beta on-the-fly during read."""
-        from cag.retriever import Retriever
+        from rrl.retriever import Retriever
         
         # c2 initial state: alpha=2.0, beta=3.0, last_updated=100.0
         # Decay over 2 decay units with gamma = 0.90
@@ -273,7 +273,7 @@ class TestFeedbackMath(unittest.TestCase):
                 decay_unit_sec=1.0
             )
 
-        from cag.retriever import Retriever
+        from rrl.retriever import Retriever
         retriever = Retriever(self.store, weights=(1.0, 0.0, 0.0, 0.0))
         res = retriever.retrieve({"c_active": 1.0, "c_idle": 1.0}, top_k=2, explore=False, current_timestamp=10.0, gamma=0.5, decay_unit_sec=1.0)
         

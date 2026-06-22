@@ -1,5 +1,5 @@
 """
-Unit Tests for CAG FastAPI App (Phase 4).
+Unit Tests for RRL FastAPI App (Phase 4).
 Tests /retrieve and /feedback HTTP endpoints and persistent SQLite side-effects.
 """
 
@@ -11,10 +11,10 @@ from fastapi.testclient import TestClient
 
 # Create a temporary SQLite database file for testing
 db_file_fd, db_file_path = tempfile.mkstemp()
-os.environ["CAG_DB_PATH"] = db_file_path
+os.environ["RRL_DB_PATH"] = db_file_path
 
-from cag.store import Candidate
-from cag.api import app, store, retriever
+from rrl.store import Candidate
+from rrl.api import app, store, retriever
 
 
 class TestAPI(unittest.TestCase):

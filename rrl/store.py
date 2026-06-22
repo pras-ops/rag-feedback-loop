@@ -1,5 +1,5 @@
 """
-CAG Candidate and Store Implementations
+RRL Candidate and Store Implementations
 Defines the Candidate dataclass with its Beta distribution counters and the CandidateStore.
 """
 

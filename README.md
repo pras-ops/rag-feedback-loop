@@ -1,6 +1,9 @@
-# CAG — A Retrieval Reputation Layer
+# RRL — A Retrieval Reputation Layer
 
-CAG is **not a retriever.** It is a lightweight **reputation layer that sits on top of any
+> **RRL** = **R**etrieval **R**eputation **L**ayer. *Not* to be confused with Cache-Augmented
+> Generation ("CAG"); RRL is a ranking-time reputation layer, not a retrieval-free method.
+
+RRL is **not a retriever.** It is a lightweight **reputation layer that sits on top of any
 retriever and converts verified downstream outcomes into a ranking signal** — boosting
 documents that have *actually produced good results* and decaying ones that go stale. It is
 built around per-document Beta counters updated from feedback (verifier, user behavior, LLM
@@ -18,11 +21,11 @@ feedback.
 
 The central, evidence-backed claim is deliberately **conditional**:
 
-> **Recurrence + a trustworthy verifier →** CAG accumulates outcome signal and helps.
-> **No recurrence →** CAG cannot accumulate signal and *slightly underperforms* a strong
+> **Recurrence + a trustworthy verifier →** RRL accumulates outcome signal and helps.
+> **No recurrence →** RRL cannot accumulate signal and *slightly underperforms* a strong
 > baseline (a small exploration tax).
 
-Both halves are demonstrated. We show a strong cross-encoder reranker **beating** CAG in a
+Both halves are demonstrated. We show a strong cross-encoder reranker **beating** RRL in a
 one-shot, non-recurring setting (Gate C) — that boundary is stated up front, not hidden. The
 *same* mechanism explains both the wins and the loss, which is the point: this is outcome-aware
 retrieval *under specific conditions*, not a universally superior retriever.
@@ -34,7 +37,7 @@ This is a **research/experimental** project built around honest evaluation. See
 
 ## Where it fits
 
-Two properties decide whether CAG helps: **trustworthy feedback** (a verifier, or a
+Two properties decide whether RRL helps: **trustworthy feedback** (a verifier, or a
 controlled/trusted source) and **repetition** (similar queries recur enough for counters to
 converge).
 
@@ -69,26 +72,30 @@ converge).
 
 | Module | Responsibility |
 |---|---|
-| `cag/store.py` | `Candidate` dataclass (α/β, A/B, `fooled`/`verified`, `recent_outcomes`) + in-memory `CandidateStore` |
-| `cag/store_sqlite.py` | Persistent store: durable, **lazy decay**, **atomic increments**, `pending` (retrieve↔feedback bridge), schema migration |
-| `cag/retriever.py` | Hybrid retrieval (SentenceTransformer + custom BM25, RRF-fused), Thompson-sampling exploration, rarity bonus, ε-greedy, robust exploitation estimate |
-| `cag/feedback.py` | Outcome aggregation `y`, soft κ-weighted update, liar counter, robust estimators, optional ADT denoising |
-| `cag/judge.py` | LLM faithfulness judge (Gemini) with a token-overlap fallback when offline |
-| `cag/ingest.py` | Document chunking + embedding into candidates |
-| `cag/api.py` | FastAPI service: `POST /retrieve`, `POST /feedback`, `GET /health` |
+| `rrl/store.py` | `Candidate` dataclass (α/β, A/B, `fooled`/`verified`, `recent_outcomes`) + in-memory `CandidateStore` |
+| `rrl/store_sqlite.py` | Persistent store: durable, **lazy decay**, **atomic increments**, `pending` (retrieve↔feedback bridge), schema migration |
+| `rrl/retriever.py` | Hybrid retrieval (SentenceTransformer + custom BM25, RRF-fused), Thompson-sampling exploration, rarity bonus, ε-greedy, robust exploitation estimate |
+| `rrl/feedback.py` | Outcome aggregation `y`, soft κ-weighted update, liar counter, robust estimators, optional ADT denoising |
+| `rrl/judge.py` | LLM faithfulness judge (Gemini) with a token-overlap fallback when offline |
+| `rrl/ingest.py` | Document chunking + embedding into candidates |
+| `rrl/api.py` | FastAPI service: `POST /retrieve`, `POST /feedback`, `GET /health` |
 
 ---
 
 ## Install
 
-Requires Python 3.10+.
+Requires Python 3.10+. Install the package with the extras you need:
 
 ```bash
-pip install sentence-transformers numpy scipy scikit-learn       # core retrieval
-pip install fastapi uvicorn pydantic                              # API
-pip install google-genai                                         # optional: live LLM judge (else heuristic fallback)
-pip install matplotlib                                            # simulations/plots
+pip install -e .                 # core retrieval (sentence-transformers, numpy, scipy, scikit-learn)
+pip install -e ".[api]"          # + FastAPI service
+pip install -e ".[llm]"          # + live LLM judge (else heuristic fallback)
+pip install -e ".[dev]"          # + simulations/plots and the test suite
+pip install -e ".[api,llm,dev]"  # everything
 ```
+
+To reproduce the benchmark gates against the exact validated dependency versions, use the
+pinned set instead: `pip install -r requirements.txt`.
 
 > The first retrieval downloads the `all-MiniLM-L6-v2` model (~80 MB). The LLM judge needs
 > `GEMINI_API_KEY` or Vertex AI credentials; without them it falls back to a local heuristic.
@@ -98,10 +105,10 @@ pip install matplotlib                                            # simulations/
 ## Quickstart (library)
 
 ```python
-from cag.store import CandidateStore
-from cag.ingest import Ingester
-from cag.retriever import Retriever
-from cag.feedback import OutcomeSignals, update_counters
+from rrl.store import CandidateStore
+from rrl.ingest import Ingester
+from rrl.retriever import Retriever
+from rrl.feedback import OutcomeSignals, update_counters
 
 store = CandidateStore()
 ingester = Ingester()
@@ -115,7 +122,7 @@ retrieved_sims = {cand.id: sim for cand, score, sim in results}
 
 # After observing how the answer landed, feed an outcome back:
 signals = OutcomeSignals(s_behave=0.9, s_gt=1.0, s_judge=0.8, s_expl=1.0)
-from cag.feedback import calculate_outcome
+from rrl.feedback import calculate_outcome
 y = calculate_outcome(signals)                 # y in [0,1]
 update_counters(store, retrieved_sims, y, signals=signals)
 ```
@@ -123,7 +130,7 @@ update_counters(store, retrieved_sims, y, signals=signals)
 ## Quickstart (API)
 
 ```bash
-uvicorn cag.api:app --reload     # uses SqliteCandidateStore at $CAG_DB_PATH (default cag.db)
+uvicorn rrl.api:app --reload     # uses SqliteCandidateStore at $RRL_DB_PATH (default rrl.db)
 ```
 
 ```bash
@@ -169,7 +176,7 @@ from `last_updated` (no cron sweep).
 
 ## Robustness & denoising
 
-Naive learning from implicit feedback can degrade — a known result in the literature. CAG
+Naive learning from implicit feedback can degrade — a known result in the literature. RRL
 includes safeguards, evaluated in a 20-seed ablation (`sim/verify_robustness.py`):
 
 | Mechanism | Status | Notes |
@@ -205,7 +212,7 @@ Reported honestly — what the tests/sims actually establish, and what they don'
 - **Gate A — outcome-aware ranking helps under recurrence** (`sim/run_gate_a.py`): 10-seed,
   top_k=1, with an **independent answer-verifier** that inspects only the generated answer
   (never the retrieved doc IDs), so the training signal can't leak the eval label. Under
-  recurrence, CAG's answer correctness separates from a static baseline with **non-overlapping
+  recurrence, RRL's answer correctness separates from a static baseline with **non-overlapping
   95% CIs**. *Scope:* controlled corpus, synthetic keyword-verifier — a proof of mechanism, not
   a production number.
   
@@ -218,7 +225,7 @@ Reported honestly — what the tests/sims actually establish, and what they don'
   ![Gate B Comparison](sim/gate_b_comparison.png)
 - **Gate D — recurrence beats a strong reranker** (`sim/run_gate_d.py`): recurring-query
   benchmark (epochs over a fixed problem set) against a **cross-encoder** reranker. With
-  recurrence, CAG (**global counters**) overtakes the reranker — the same reranker that *wins*
+  recurrence, RRL (**global counters**) overtakes the reranker — the same reranker that *wins*
   without recurrence (Gate C). *Scope:* controlled synthetic hint corpus; see the realistic
   benchmark below.
   
@@ -227,10 +234,10 @@ Reported honestly — what the tests/sims actually establish, and what they don'
 ### Boundary condition ⛔ — stated, not hidden
 - **Gate C — no recurrence → a strong reranker wins** (`sim/run_gate_c.py`): one-shot HumanEval
   (50 distinct problems, ~1 visit each), **real Gemini generation**, **real unit-test verifier**.
-  A production-grade cross-encoder reranker **beats CAG** — overall **65.2% [60.6, 69.8]** vs
-  CAG **59.4% [54.4, 64.4]**. With no repeated traffic, the reputation loop has nothing to
-  accumulate, so CAG only pays a small exploration tax. *This negative result is central* — it
-  constrains the claim to the recurrence regime instead of pretending CAG is universally better.
+  A production-grade cross-encoder reranker **beats RRL** — overall **65.2% [60.6, 69.8]** vs
+  RRL **59.4% [54.4, 64.4]**. With no repeated traffic, the reputation loop has nothing to
+  accumulate, so RRL only pays a small exploration tax. *This negative result is central* — it
+  constrains the claim to the recurrence regime instead of pretending RRL is universally better.
   
   ![Gate C Comparison](sim/gate_c_comparison.png)
 
@@ -255,7 +262,7 @@ Reported honestly — what the tests/sims actually establish, and what they don'
 - **Verifier-bounded.** Robustness against bad feedback rises and falls with how often a
   verifier (`s_gt`) is available.
 - **The >50% wall.** If a majority of feedback for an item is dishonest, no statistic on the
-  feedback alone recovers truth — by information theory. Scope CAG to controlled/verifiable
+  feedback alone recovers truth — by information theory. Scope RRL to controlled/verifiable
   settings.
 - **Exploration cost.** Exploration improves discovery but can evict correct results from a
   small top-k; tune `epsilon`/`explore` to your top-k.
@@ -268,7 +275,7 @@ Reported honestly — what the tests/sims actually establish, and what they don'
 ## Repository layout
 
 ```
-cag/                  core library (store, retriever, feedback, judge, ingest, api, store_sqlite)
+rrl/                  core library (store, retriever, feedback, judge, ingest, api, store_sqlite)
 sim/                  gates: verify_robustness.py, run_gate_a.py (value), run_gate_b.py (decay),
                       run_gate_c.py (no-recurrence boundary), run_gate_d.py (synthetic recurrence),
                       run_gate_recurring.py (realistic recurrence, MBPP), gate_c_verifier.py
@@ -292,23 +299,23 @@ USE_REAL_GEMINI=true python3 sim/run_gate_recurring.py   # realistic recurring b
 
 ## Related work
 
-CAG sits between two active areas, and is deliberately a *smaller* mechanism than either.
+RRL sits between two active areas, and is deliberately a *smaller* mechanism than either.
 Full positioning + citations in [RELATED_WORK.md](RELATED_WORK.md).
 
 - **Agent memory / experience reuse** — Evo-Memory + ReMem ([arXiv:2511.20857](https://arxiv.org/abs/2511.20857)),
   ExpeL, Agent Workflow Memory, Dynamic Cheatsheet, Agentic Context Engineering. These
-  *extract and inject* workflows/insights at the prompt level. **CAG works one level lower** —
+  *extract and inject* workflows/insights at the prompt level. **RRL works one level lower** —
   per-document Beta reputation at the *ranking* level, writing no new memory artifacts and
   putting no LLM in the memory loop.
 - **Online / feedback RAG reranking & LTR** — DynamicRAG, AutoRAG-HP, LTRR, Online-Optimized
-  RAG, REARANK. These *train/prompt a reranker* from feedback. **CAG keeps the reranker fixed**
+  RAG, REARANK. These *train/prompt a reranker* from feedback. **RRL keeps the reranker fixed**
   and adds a non-parametric reputation prior with staleness decay, noise/sycophancy safeguards,
   and a stated boundary condition.
 - **Statistical lineage (not novel, by design)** — Beta Reputation System (Jøsang & Ismail
   2002), Beta-Bernoulli click models, bandit learning-to-rank. The contribution is the clean,
   safeguarded, honestly-evaluated *integration*, not the estimator.
 - **Evaluation honesty** — aligns with ["Benchmarking is Broken"](https://arxiv.org/html/2510.07575v2);
-  CAG independently caught and fixed an LLM-judge circularity (see Gate A history).
+  RRL independently caught and fixed an LLM-judge circularity (see Gate A history).
 
 **Not yet compared on** the standard streaming benchmark (Evo-Memory) or a strong full stack —
 see [RELATED_WORK.md](RELATED_WORK.md) for the honest gap list.
@@ -322,7 +329,7 @@ see [RELATED_WORK.md](RELATED_WORK.md) for the honest gap list.
    rather than globally. Implemented but **not validated** — needs evidence on cluster
    stability, fragmentation, sparse-cluster shrinkage, and clustered-vs-global lift before it
    is a claim rather than a proposal.
-3. **Strong-stack comparison.** *Strong Stack* vs *Strong Stack + CAG* (hybrid retrieval +
+3. **Strong-stack comparison.** *Strong Stack* vs *Strong Stack + RRL* (hybrid retrieval +
    query rewriting + multi-query + agent memory), not just retriever-level. The eventual
    deployment-relevant test.
 4. **No-verifier validation** — behavior under purely behavioral/judge feedback (e.g.

@@ -4,9 +4,9 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
-from cag.store import Candidate
-from cag.store_sqlite import SqliteCandidateStore
-from cag.feedback import (
+from rrl.store import Candidate
+from rrl.store_sqlite import SqliteCandidateStore
+from rrl.feedback import (
     OutcomeSignals,
     calculate_outcome,
     calculate_robust_estimate,
@@ -159,7 +159,7 @@ class TestRobustnessUpgrades(unittest.TestCase):
         self.assertAlmostEqual(cand_anomaly.alpha, 1.08 + 0.8 * math_exp_calc(0.5) * 0.9)
 
     def test_update_counters_with_signals(self):
-        from cag.feedback import update_counters_with_signals
+        from rrl.feedback import update_counters_with_signals
         store = SqliteCandidateStore(self.db_path)
         cand = Candidate(id="c1", content="c1_content", alpha=1.0, beta=1.0, A=1.0, B=1.0, fooled=1.0, verified=2.0)
         store.add_candidate(cand)

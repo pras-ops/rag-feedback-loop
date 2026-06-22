@@ -1,5 +1,5 @@
 """
-CAG Robustness and Denoising Verification Suite
+RRL Robustness and Denoising Verification Suite
 Runs comparative simulations of:
 1. Head-to-head comparison of robust estimators (Beta, Median, Trimmed Mean, MoM)
 2. Liar counter influence under various sycophancy levels
@@ -14,12 +14,12 @@ import random
 import sys
 from typing import Dict, List, Tuple
 
-# Add parent directory to path so we can import cag package
+# Add parent directory to path so we can import rrl package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cag.store import Candidate, CandidateStore
-from cag.retriever import Retriever
-from cag.feedback import OutcomeSignals, calculate_outcome, update_counters, calculate_robust_estimate
+from rrl.store import Candidate, CandidateStore
+from rrl.retriever import Retriever
+from rrl.feedback import OutcomeSignals, calculate_outcome, update_counters, calculate_robust_estimate
 from sim.harness import CANDIDATE_DEFS, setup_store, generate_query_similarities, simulate_user_feedback
 
 # Simulation Config
@@ -121,7 +121,7 @@ def mean_and_std(data: List[float]) -> Tuple[float, float]:
 
 def main():
     print("=" * 110)
-    print("CAG ROBUSTNESS & DE-NOISING ABLATION RUNNER (20-SEED SWEEP)")
+    print("RRL ROBUSTNESS & DE-NOISING ABLATION RUNNER (20-SEED SWEEP)")
     print("=" * 110)
 
     sycophancy_levels = [0.0, 0.15, 0.30, 0.45, 0.60]

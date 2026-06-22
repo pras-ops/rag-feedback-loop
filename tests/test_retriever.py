@@ -5,9 +5,9 @@ import random
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cag.store import Candidate, CandidateStore
-from cag.retriever import Retriever
-from cag.clustering import QueryClusterer
+from rrl.store import Candidate, CandidateStore
+from rrl.retriever import Retriever
+from rrl.clustering import QueryClusterer
 
 
 import numpy as np

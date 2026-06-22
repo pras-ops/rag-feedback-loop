@@ -1,7 +1,7 @@
 """
-CAG Phase B Validation: Staleness & Decay Sweep (30-Seed Comparison)
+RRL Phase B Validation: Staleness & Decay Sweep (30-Seed Comparison)
 Runs 100 evaluation steps per seed where the ground-truth document changes at step 50.
-Compares a CAG retriever with Decay ON (gamma = 0.90) vs. Decay OFF (gamma = 1.0).
+Compares a RRL retriever with Decay ON (gamma = 0.90) vs. Decay OFF (gamma = 1.0).
 Saves comparison plots to sim/gate_b_comparison.png.
 """
 
@@ -13,13 +13,13 @@ import time
 from typing import List, Dict, Tuple, Optional
 import matplotlib.pyplot as plt
 
-# Add parent directory to path so we can import cag package
+# Add parent directory to path so we can import rrl package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cag.store import Candidate, CandidateStore
-from cag.ingest import Ingester
-from cag.retriever import Retriever
-from cag.feedback import OutcomeSignals, calculate_outcome, update_counters
+from rrl.store import Candidate, CandidateStore
+from rrl.ingest import Ingester
+from rrl.retriever import Retriever
+from rrl.feedback import OutcomeSignals, calculate_outcome, update_counters
 
 # Set up simple rule-based mock for generation to make it fast and avoid API costs/limits
 def generate_answer(query: str, contexts: List[str]) -> str:
@@ -150,7 +150,7 @@ def run_simulation(seed: int, num_steps: int, gamma_val: float) -> Tuple[List[fl
 
 def main():
     print("=" * 110)
-    print("CAG PHASE B VALIDATION RUNNER: STALENESS & DECAY COMPARISON (30-SEED SWEEP)")
+    print("RRL PHASE B VALIDATION RUNNER: STALENESS & DECAY COMPARISON (30-SEED SWEEP)")
     print("=" * 110)
 
     seeds = list(range(42, 72))  # 30 seeds for a real significance verdict

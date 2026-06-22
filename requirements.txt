@@ -1,9 +1,12 @@
-sentence-transformers
-numpy
-scipy
-scikit-learn
-fastapi
-uvicorn
-pydantic
-matplotlib
-google-genai
+# Pinned to the versions the benchmark gates were validated against, so the
+# numbers in the README reproduce. For looser, library-style bounds see
+# pyproject.toml ([project] dependencies + optional-dependencies).
+sentence-transformers==5.4.1
+numpy==2.4.4
+scipy==1.17.1
+scikit-learn==1.8.0
+fastapi==0.136.0
+uvicorn==0.45.0
+pydantic==2.13.3
+matplotlib==3.11.0
+google-genai==1.73.1

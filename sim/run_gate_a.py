@@ -1,6 +1,6 @@
 """
-CAG Phase A Validation: Real Eval & Static Baseline RRF Comparison (10-Seed Sweep)
-Runs 150 evaluation steps per seed comparing a Static retriever vs. the CAG feedback loop.
+RRL Phase A Validation: Real Eval & Static Baseline RRF Comparison (10-Seed Sweep)
+Runs 150 evaluation steps per seed comparing a Static retriever vs. the RRL feedback loop.
 Uses an objective verifier on generated answer text to train and evaluate performance.
 Saves comparison plots to sim/gate_a_comparison.png.
 """
@@ -14,14 +14,14 @@ import time
 from typing import List, Dict, Tuple, Optional
 import matplotlib.pyplot as plt
 
-# Add parent directory to path so we can import cag package
+# Add parent directory to path so we can import rrl package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cag.store import Candidate, CandidateStore
-from cag.ingest import Ingester
-from cag.retriever import Retriever
-from cag.feedback import OutcomeSignals, calculate_outcome, update_counters
-from cag.judge import evaluate_faithfulness, _get_client
+from rrl.store import Candidate, CandidateStore
+from rrl.ingest import Ingester
+from rrl.retriever import Retriever
+from rrl.feedback import OutcomeSignals, calculate_outcome, update_counters
+from rrl.judge import evaluate_faithfulness, _get_client
 
 try:
     from google.genai import types
@@ -270,7 +270,7 @@ def main():
     signal.alarm(GLOBAL_TIMEOUT_SEC)
 
     print("=" * 110)
-    print("CAG PHASE A VALIDATION RUNNER: ADAPTIVE RETRIEVER VS STATIC BASELINE (10-SEED SWEEP)")
+    print("RRL PHASE A VALIDATION RUNNER: ADAPTIVE RETRIEVER VS STATIC BASELINE (10-SEED SWEEP)")
     print("=" * 110)
 
     seeds = list(range(42, 52)) # 10 seeds ( Finding 3 )
@@ -353,7 +353,7 @@ def main():
             is_correct_ans_static = verify_answer(target_doc_id, ans_static)
             s_correctness.append(is_correct_ans_static)
 
-            # B. CAG Feedback Arm
+            # B. RRL Feedback Arm
             # epsilon=0.0 forces Thompson Sampling to handle exploration (self-decaying)
             res_cag = retriever_cag.retrieve(query_text, top_k=top_k, explore=True, epsilon=0.0)
             top_cand_cag = res_cag[0][0]
@@ -400,8 +400,8 @@ def main():
             )
 
         # Log seed progress
-        print(f"  Seed {seed} finished. [Recall@1 Static={sum(s_recall1)/len(s_recall1):.2f} | CAG={sum(c_recall1)/len(c_recall1):.2f}] "
-              f"[Correctness Static={sum(s_correctness)/len(s_correctness):.2f} | CAG={sum(c_correctness)/len(c_correctness):.2f}]", flush=True)
+        print(f"  Seed {seed} finished. [Recall@1 Static={sum(s_recall1)/len(s_recall1):.2f} | RRL={sum(c_recall1)/len(c_recall1):.2f}] "
+              f"[Correctness Static={sum(s_correctness)/len(s_correctness):.2f} | RRL={sum(c_correctness)/len(c_correctness):.2f}]", flush=True)
 
         # Record seed overall & late stage (last 30 steps) averages
         static_seed_recall1.append(sum(s_recall1) / len(s_recall1))
@@ -438,9 +438,9 @@ def main():
     words_cag_stats = sum(cag_seed_words) / len(cag_seed_words)
 
     print("\n" + "=" * 115)
-    print("DECISION-GRADE GATE A RESULTS: STATIC VS ADAPTIVE CAG (10-SEED SWEEP, TOP_K=1, UNBIASED VERIFIER)")
+    print("DECISION-GRADE GATE A RESULTS: STATIC VS ADAPTIVE RRL (10-SEED SWEEP, TOP_K=1, UNBIASED VERIFIER)")
     print("=" * 115)
-    print(f"{'Metric':<35} | {'Static (Mean±Std [95% CI])':<38} | {'CAG (Mean±Std [95% CI])':<38}")
+    print(f"{'Metric':<35} | {'Static (Mean±Std [95% CI])':<38} | {'RRL (Mean±Std [95% CI])':<38}")
     print("-" * 115)
     
     # Format Recall@1
@@ -467,7 +467,7 @@ def main():
 
         plt.figure(figsize=(10, 6))
         plt.plot(moving_average(sample_static_recall_history), label="Static Baseline (Recall@1)", color="#dc2626", linewidth=2.5, linestyle="--")
-        plt.plot(moving_average(sample_cag_recall_history), label="CAG Feedback Loop (Recall@1)", color="#2563eb", linewidth=3.0)
+        plt.plot(moving_average(sample_cag_recall_history), label="RRL Feedback Loop (Recall@1)", color="#2563eb", linewidth=3.0)
         
         plt.title("Gate A (10-Seed Sweep): Recall@1 Learning Curve Comparison\n(Seed 42 Sample Trace - 15-Step Moving Average)", fontsize=12, fontweight="bold")
         plt.xlabel("Query Step", fontsize=10)
