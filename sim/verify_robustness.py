@@ -17,9 +17,9 @@ from typing import Dict, List, Tuple
 # Add parent directory to path so we can import rrl package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from rrl.store import Candidate, CandidateStore
+from rrl.store import Candidate
 from rrl.retriever import Retriever
-from rrl.feedback import OutcomeSignals, calculate_outcome, update_counters, calculate_robust_estimate
+from rrl.feedback import calculate_outcome, update_counters, calculate_robust_estimate
 from sim.harness import CANDIDATE_DEFS, setup_store, generate_query_similarities, simulate_user_feedback
 
 # Simulation Config

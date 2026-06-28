@@ -27,7 +27,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[api,dev]"
 
+      - name: Run Ruff Lint Check
+        run: python -m ruff check .
+
+      - name: Run Mypy Type Check
+        run: python -m mypy rrl/
+
       - name: Run tests
         # The retriever tests inject a MockSentenceTransformer, so the suite
         # runs network-free (no model weights are downloaded).
         run: python -m pytest tests/ -q
+
+      - name: Run recurring gate self-test (smoke test)
+        run: python3 sim/run_gate_recurring.py --selftest

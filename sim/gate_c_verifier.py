@@ -13,7 +13,7 @@ approach and is fine for a local demo, but production should sandbox in a contai
 import json
 import subprocess
 import sys
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 
 def load_humaneval(path: str = "data/HumanEval.jsonl", limit: Optional[int] = None) -> List[dict]:

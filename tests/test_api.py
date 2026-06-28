@@ -13,8 +13,8 @@ from fastapi.testclient import TestClient
 db_file_fd, db_file_path = tempfile.mkstemp()
 os.environ["RRL_DB_PATH"] = db_file_path
 
-from rrl.store import Candidate
-from rrl.api import app, store, retriever
+from rrl.store import Candidate  # noqa: E402
+from rrl.api import app, store, retriever  # noqa: E402
 
 
 class TestAPI(unittest.TestCase):

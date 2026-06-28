@@ -11,8 +11,7 @@ Saves plots to sim/results.png, sim/noise_sweep.png, and sim/counter_drift.png.
 import os
 import random
 import sys
-import time
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 
 # Add parent directory to path so we can import rrl package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

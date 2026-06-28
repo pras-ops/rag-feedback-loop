@@ -4,7 +4,6 @@ Implements the feedback aggregation outcome (y) and the soft,
 confidence-weighted update step (κ) with exponential decay (γ).
 """
 
-import datetime
 from dataclasses import dataclass
 from typing import Dict, Optional
 from .store import CandidateStore

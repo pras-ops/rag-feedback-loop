@@ -11,7 +11,6 @@ import os
 import random
 import re
 import signal
-import subprocess
 import sys
 import time
 from typing import List, Dict, Tuple, Optional
@@ -19,7 +18,7 @@ from typing import List, Dict, Tuple, Optional
 # Add parent directory to path so we can import rrl package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from rrl.store import Candidate, CandidateStore
+from rrl.store import CandidateStore
 from rrl.ingest import Ingester
 from rrl.retriever import Retriever
 from rrl.feedback import OutcomeSignals, calculate_outcome, update_counters
@@ -275,7 +274,6 @@ def run_simulation(
                 raise RuntimeError("No candidates retrieved during static baseline run.")
         
         # Check if good document was retrieved
-        is_good_retrieved = "_good" in top_cand.id
 
         # Generate code and run real unit tests
         contexts = [top_cand.content]

@@ -12,6 +12,7 @@ import re
 from typing import Dict, List, Tuple, Optional, Union
 from sentence_transformers import SentenceTransformer
 from .store import Candidate, CandidateStore
+from .clustering import QueryClusterer
 
 
 def tokenize(text: str) -> List[str]:
@@ -71,7 +72,7 @@ class Retriever:
         model: Optional[SentenceTransformer] = None,
         robust_estimator_mode: str = "beta",
         use_optimistic_prior: bool = True,
-        clusterer: Optional[object] = None,
+        clusterer: Optional[QueryClusterer] = None,
         use_clustering: bool = True
     ):
         self.store = store
@@ -83,8 +84,8 @@ class Retriever:
         self.use_optimistic_prior = use_optimistic_prior
         self.use_clustering = use_clustering
         
+        self.clusterer: QueryClusterer
         if clusterer is None:
-            from .clustering import QueryClusterer
             self.clusterer = QueryClusterer()
             self.clusterer.load(self.store)
         else:
@@ -241,6 +242,7 @@ class Retriever:
                 last_confirmed = candidate.last_confirmed
                 dt = current_timestamp - last_confirmed if current_timestamp is not None else 0.0
                 if dt > 0 and decay_unit_sec > 0:
+                    assert current_timestamp is not None
                     days = dt / decay_unit_sec
                     decay_factor = gamma ** days
                     candidate.alpha = 1.0 + (candidate.alpha - 1.0) * decay_factor
@@ -320,8 +322,8 @@ class Retriever:
         if explore and random.random() < epsilon and len(sim_scores) > top_k:
             all_cids = list(sim_scores.keys())
             selected_cids = [r[0].id for r in results[:top_k-1]]
-            candidate_pool = [self.store.get_candidate(cid) for cid in all_cids if cid not in selected_cids]
-            candidate_pool = [c for c in candidate_pool if c is not None]
+            raw_pool = [self.store.get_candidate(cid) for cid in all_cids if cid not in selected_cids]
+            candidate_pool: List[Candidate] = [c for c in raw_pool if c is not None]
 
             if candidate_pool:
                 min_count = min(c.alpha + c.beta for c in candidate_pool)

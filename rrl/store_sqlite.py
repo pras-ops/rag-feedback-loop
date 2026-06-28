@@ -11,7 +11,7 @@ import time
 from contextlib import contextmanager
 from typing import Dict, List, Optional, Tuple
 
-from .store import Candidate
+from .store import Candidate, CandidateStore
 
 
 SCHEMA_MODERN = """
@@ -58,13 +58,14 @@ def _decay(value: float, gamma: float, dt_units: float) -> float:
     return 1.0 + (value - 1.0) * (gamma ** dt_units)
 
 
-class SqliteCandidateStore:
+class SqliteCandidateStore(CandidateStore):
     def __init__(
         self,
         db_path: str,
         gamma: float = 1.0,
         decay_unit_sec: float = 86400.0,
     ):
+        super().__init__()
         self.db_path = db_path
         self.gamma = gamma
         self.decay_unit_sec = decay_unit_sec

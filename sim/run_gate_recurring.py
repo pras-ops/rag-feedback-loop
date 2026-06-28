@@ -173,10 +173,45 @@ def stats(data: List[float]) -> Tuple[float, float, float, float]:
     return mean, math.sqrt(var), mean - t_val * sem, mean + t_val * sem
 
 
+# ---------------------------------------------------------------- cache logic
+
+GLOBAL_CACHE: Dict[str, dict] = {}
+CACHE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "mbpp_sweep_cache.jsonl"))
+
+def load_cache():
+    global GLOBAL_CACHE
+    GLOBAL_CACHE = {}
+    if os.path.exists(CACHE_PATH):
+        with open(CACHE_PATH, "r") as f:
+            for line in f:
+                if line.strip():
+                    try:
+                        data = json.loads(line)
+                        k = f"{data['task_id']}_{data['retrieved_id']}"
+                        GLOBAL_CACHE[k] = data
+                    except Exception:
+                        pass
+
+def save_to_cache(task_id: int, retrieved_id: str, retrieved_content: str, completion: str, passed: float):
+    k = f"{task_id}_{retrieved_id}"
+    data = {
+        "task_id": task_id,
+        "retrieved_id": retrieved_id,
+        "retrieved_content": retrieved_content,
+        "completion": completion,
+        "passed": passed
+    }
+    GLOBAL_CACHE[k] = data
+    os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
+    with open(CACHE_PATH, "a") as f:
+        f.write(json.dumps(data) + "\n")
+
+
 # ---------------------------------------------------------------- one run
 
 def run_arm(seed: int, epochs: int, use_cag: bool, use_real: bool,
-            cross_encoder=None) -> List[float]:
+            cross_encoder=None, replay_mode: bool = False) -> List[float]:
+    random.seed(seed)
     query_problems, corpus_docs = build_dataset(seed)
     store = CandidateStore()
     ingester = Ingester()
@@ -192,7 +227,6 @@ def run_arm(seed: int, epochs: int, use_cag: bool, use_real: bool,
         stream.extend(order)
 
     history = []
-    gen_cache: Dict[Tuple[int, str], float] = {}
     for step, problem in enumerate(stream):
         if use_cag:
             res = retriever.retrieve(problem["text"], top_k=1, explore=True, epsilon=0.0,
@@ -208,13 +242,18 @@ def run_arm(seed: int, epochs: int, use_cag: bool, use_real: bool,
             else:
                 top = res[0][0]
 
-        key = (problem["task_id"], top.id)
-        if key in gen_cache:
-            passed = gen_cache[key]
+        cache_key = f"{problem['task_id']}_{top.id}"
+        if cache_key in GLOBAL_CACHE:
+            passed = GLOBAL_CACHE[cache_key]["passed"]
+        elif replay_mode:
+            raise RuntimeError(f"Replay cache miss for key: {cache_key}. Cannot run in replay mode without cache.")
         else:
+            state = random.getstate()
             completion = generate(problem, top.content, use_real)
             passed = run_tests(problem, completion)
-            gen_cache[key] = passed
+            save_to_cache(problem["task_id"], top.id, top.content, completion, passed)
+            random.setstate(state)
+
         history.append(passed)
 
         if use_cag:
@@ -251,6 +290,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true", help="offline plumbing check, no LLM")
     ap.add_argument("--mock", action="store_true", help="run with mock generator (INVALID results)")
+    ap.add_argument("--replay", action="store_true", help="replay sweep from cache offline, no LLM required")
     ap.add_argument("--seeds", type=int, default=5)
     ap.add_argument("--epochs", type=int, default=8)
     args = ap.parse_args()
@@ -259,10 +299,12 @@ def main():
         selftest()
         return
 
+    load_cache()
+
     use_real = os.getenv("USE_REAL_GEMINI", "false").lower() == "true"
-    if not use_real and not args.mock:
+    if not use_real and not args.mock and not args.replay:
         sys.exit("ERROR: real generation requires USE_REAL_GEMINI=true (+ GEMINI_API_KEY or "
-                 "Vertex creds). Pass --mock ONLY to test the plumbing — those results are NOT valid.")
+                 "Vertex creds). Pass --mock ONLY to test the plumbing, or --replay to play back cached results.")
     if args.mock:
         print("!" * 80)
         print("WARNING: --mock generator in use. RESULTS ARE NOT A VALID BENCHMARK, plumbing only.")
@@ -277,18 +319,31 @@ def main():
 
     seeds = list(range(42, 42 + args.seeds))
     static_overall, cag_overall, static_late, cag_late = [], [], [], []
+    
+    total_steps = args.epochs * 30  # n_query is 30
+    static_step_correctness = [0.0] * total_steps
+    cag_step_correctness = [0.0] * total_steps
+
     for s in seeds:
         sh = run_arm(s, args.epochs, use_cag=False, use_real=use_real and not args.mock,
-                     cross_encoder=cross_encoder)
-        ch = run_arm(s, args.epochs, use_cag=True, use_real=use_real and not args.mock)
-        static_overall.append(sum(sh) / len(sh)); cag_overall.append(sum(ch) / len(ch))
+                     cross_encoder=cross_encoder, replay_mode=args.replay)
+        ch = run_arm(s, args.epochs, use_cag=True, use_real=use_real and not args.mock,
+                     replay_mode=args.replay)
+                     
+        static_overall.append(sum(sh) / len(sh))
+        cag_overall.append(sum(ch) / len(ch))
         k = max(1, len(sh) // 5)
-        static_late.append(sum(sh[-k:]) / k); cag_late.append(sum(ch[-k:]) / k)
+        static_late.append(sum(sh[-k:]) / k)
+        cag_late.append(sum(ch[-k:]) / k)
         print(f"seed {s}: static={static_overall[-1]:.3f}  rrl={cag_overall[-1]:.3f}")
+        
+        for step in range(min(total_steps, len(sh), len(ch))):
+            static_step_correctness[step] += sh[step] / len(seeds)
+            cag_step_correctness[step] += ch[step] / len(seeds)
 
     so, co = stats(static_overall), stats(cag_overall)
     sl, cl = stats(static_late), stats(cag_late)
-    tag = "  (MOCK — INVALID)" if args.mock else ""
+    tag = "  (MOCK — INVALID)" if args.mock else ("  (REPLAYED)" if args.replay else "")
     print("\n" + "=" * 90)
     print(f"REALISTIC RECURRING BENCHMARK (MBPP, {args.seeds} seeds x {args.epochs} epochs){tag}")
     print("=" * 90)
@@ -298,6 +353,36 @@ def main():
     print(f"{'Late-stage pass rate':<28} | {sl[0]:.3f} [{sl[2]:.3f}, {sl[3]:.3f}]          | {cl[0]:.3f} [{cl[2]:.3f}, {cl[3]:.3f}]")
     print("=" * 90)
     print("Verdict: CI-separated => recurrence win is real; overlapping => not significant.")
+
+    # Generate Learning Curve Plot
+    try:
+        import matplotlib.pyplot as plt
+        
+        def moving_average(data: List[float], window_size: int = 15) -> List[float]:
+            ret = []
+            for i in range(len(data)):
+                start = max(0, i - window_size + 1)
+                window = data[start:i+1]
+                ret.append(sum(window) / len(window))
+            return ret
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(moving_average(static_step_correctness), label="Static Baseline (Cross-Encoder Reranked)", color="#dc2626", linewidth=2.5, linestyle="--")
+        plt.plot(moving_average(cag_step_correctness), label="RRL Feedback Loop (Thompson Sampling)", color="#2563eb", linewidth=3.0)
+        
+        plt.title("Gate Recurring (MBPP): Unit Test Pass Rate Learning Curve\n(Average across seeds - Moving Average)", fontsize=12, fontweight="bold")
+        plt.xlabel("Query Step", fontsize=10)
+        plt.ylabel("Unit Test Pass Rate", fontsize=10)
+        plt.ylim(-0.05, 1.05)
+        plt.grid(True, linestyle=":", alpha=0.6)
+        plt.legend(loc="lower right")
+        
+        plot_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "gate_recurring_comparison.png"))
+        plt.savefig(plot_path, dpi=300)
+        plt.close()
+        print(f"\n[Success] Saved comparison plots to: {plot_path}")
+    except ImportError:
+        print("[Warning] Matplotlib not found. Skipping plot generation.")
 
 
 if __name__ == "__main__":

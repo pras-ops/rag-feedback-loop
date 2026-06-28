@@ -5,11 +5,10 @@ Exposes POST /retrieve and POST /feedback endpoints.
 
 import os
 import uuid
-from typing import Dict, List, Optional
+from typing import List, Optional
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
-from rrl.store import Candidate
 from rrl.store_sqlite import SqliteCandidateStore
 from rrl.retriever import Retriever
 from rrl.feedback import OutcomeSignals, update_counters_with_signals

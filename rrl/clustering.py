@@ -117,7 +117,7 @@ def cluster_report(history: List[Tuple[str, float]]) -> dict:
         }
     
     # Map cluster_id to list of outcomes
-    cluster_outcomes = {}
+    cluster_outcomes: Dict[str, List[float]] = {}
     for cid, outcome in history:
         if cid not in cluster_outcomes:
             cluster_outcomes[cid] = []

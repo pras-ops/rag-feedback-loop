@@ -7,7 +7,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from rrl.store import Candidate, CandidateStore
 from rrl.retriever import Retriever
-from rrl.clustering import QueryClusterer
 
 
 import numpy as np

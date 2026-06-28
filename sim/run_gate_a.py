@@ -10,14 +10,13 @@ import os
 import random
 import signal
 import sys
-import time
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple
 import matplotlib.pyplot as plt
 
 # Add parent directory to path so we can import rrl package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from rrl.store import Candidate, CandidateStore
+from rrl.store import CandidateStore
 from rrl.ingest import Ingester
 from rrl.retriever import Retriever
 from rrl.feedback import OutcomeSignals, calculate_outcome, update_counters

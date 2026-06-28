@@ -50,6 +50,8 @@ llm = [
 dev = [
     "matplotlib>=3.7",
     "pytest>=7.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
 ]
 
 [project.urls]
